@@ -464,7 +464,16 @@ export class MutakitInstance extends Kernel {
 
     const slots = definition.slots || null;
     for (const key of Object.keys(options)) {
-      if (GEOMETRY_KEYS.has(key)) geometry[key] = options[key];
+      // A prop the type declares wins the name. `min` and `max` are geometry
+      // keys, and `meter`, `progress`, `slider`, and `number` all declare props
+      // called exactly that — so their ranges were being read as size clamps
+      // and never reached the element at all. A meter asked for `max: 1`
+      // silently kept the default of 100 and reported 1% where it meant 73%.
+      //
+      // The type's declaration is the more specific claim, and geometry keeps
+      // `minWidth`/`maxWidth`/`minHeight`/`maxHeight` for the case where an
+      // element genuinely needs both.
+      if (GEOMETRY_KEYS.has(key) && !(key in definition.props)) geometry[key] = options[key];
       // A key naming a declared slot is a slot fill, not a prop. Props win the
       // name if a type declares both, since a prop is the narrower claim.
       else if (slots && slots[key] && !(key in definition.props)) continue;
