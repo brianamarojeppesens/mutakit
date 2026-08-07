@@ -424,6 +424,14 @@ export function resolveTarget(target) {
     requireDOM("selector lookup");
     return document.querySelector(target);
   }
+  // A render target may be another document or the window that owns it
+  // (§10.14) — mounting into a popup should not require the caller to reach
+  // for `.document.body` themselves, which is the sort of detail that turns a
+  // supported destination into folklore.
+  if (target.nodeType === 9) return target.body || target.documentElement;
+  if (target.document && target.document.nodeType === 9) {
+    return target.document.body || target.document.documentElement;
+  }
   return target;
 }
 
@@ -484,6 +492,10 @@ export function injectStyle(css, options) {
   const root = opts.root || document;
   const target = root.adoptedStyleSheets !== undefined ? root : document;
   const f = detectFeatures();
+  // A constructable sheet belongs to the document that made it, so one built
+  // here cannot be adopted by an iframe or a popup (§10.14). Those get the
+  // `<style>` path, in their own document.
+  const foreign = root.nodeType === 9 && root !== document;
 
   // `first` forces the `<style>` path, at the top of `<head>`.
   //
@@ -495,7 +507,7 @@ export function injectStyle(css, options) {
   // That breaks §12.1's whole promise, which is that restyling never needs
   // `!important`. Declaring the order in the document, before anything else,
   // is what makes the name mean what it says.
-  if (!opts.first && f.constructableSheets && target.adoptedStyleSheets !== undefined) {
+  if (!opts.first && !foreign && f.constructableSheets && target.adoptedStyleSheets !== undefined) {
     const sheet = new CSSStyleSheet();
     sheet.replaceSync(css);
     target.adoptedStyleSheets = [...target.adoptedStyleSheets, sheet];
@@ -506,7 +518,8 @@ export function injectStyle(css, options) {
     };
   }
 
-  const style = document.createElement("style");
+  const owner = root.nodeType === 9 ? root : document;
+  const style = owner.createElement("style");
   if (opts.nonce) style.setAttribute("nonce", opts.nonce);
   style.textContent = css;
   const parent = root.head || root;

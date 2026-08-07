@@ -701,6 +701,48 @@ describe("content interop (§8.8)", () => {
   });
 });
 
+describe("render targets (§10.14)", () => {
+  test("a root in another document renders there, styles and all", (t) => {
+    const { mk } = fixture(t);
+
+    const frame = document.createElement("iframe");
+    frame.style.cssText = "width:400px;height:300px;border:0";
+    t.sandbox().appendChild(frame);
+    const doc = frame.contentDocument;
+    doc.body.style.margin = "0";
+
+    // §10.14 calls another document, an iframe, or a popup a supported
+    // destination. Elements and geometry already worked, because appending
+    // into another document adopts the node — what did not follow was the
+    // *stylesheet*. It went to the host document, so the subtree in the frame
+    // had no base CSS at all: the engine computed 100×50 and the browser drew
+    // 400×300, and nothing reported a disagreement.
+    const app = mk.mount(doc, { sizing: "fixed", size: { w: 400, h: 300 } });
+    const surface = app.create("surface", {
+      id: "frame-s", at: "top-left", inset: 10, size: { w: 100, h: 50 }, content: "framed"
+    });
+    mk.tick();
+
+    t.equal(surface.el.ownerDocument, doc, "the element lives in the frame");
+    t.deepEqual(rect(surface), [10, 10, 100, 50], "and the engine placed it");
+
+    const drawn = surface.el.getBoundingClientRect();
+    t.close(drawn.width, 100, 1, "which is also what the browser drew");
+    t.close(drawn.height, 50, 1);
+    const style = doc.defaultView.getComputedStyle(surface.el);
+    t.equal(style.position, "absolute", "base CSS reached the frame");
+    t.equal(style.borderRadius, "6px", "and so did the element's own");
+
+    // The instance keeps working in the host document at the same time.
+    const here = t.sandbox();
+    here.style.cssText = "position:relative;width:200px;height:100px";
+    const second = mk.mount(here, { sizing: "fixed", size: { w: 200, h: 100 } });
+    const local = second.create("surface", { id: "host-s", at: "top-left", inset: 5, size: { w: 50, h: 20 } });
+    mk.tick();
+    t.close(local.el.getBoundingClientRect().width, 50, 1, "two documents, one instance");
+  });
+});
+
 describe("lookup and identity (§8.9)", () => {
   test("byId, query, and duplicate ids", (t) => {
     const { mk, app } = fixture(t);
@@ -3385,10 +3427,11 @@ describe("collection traits (§9)", () => {
   test("a trait may ship its own styles, injected once", (t) => {
     const { mk, holder } = list(t, { trait: "selectable" });
     mk.tick();
-    t.equal(mk.styles.injected.has("trait:selectable"), true);
+    t.equal(mk.styles.has("trait:selectable"), true);
     const second = holder.create("pane", { id: "extra" });
     mk.attachTrait(second.node, "selectable", {});
-    t.equal(mk.styles.injected.has("trait:selectable"), true, "and only once");
+    // Once per document, not once per element that composes the trait.
+    t.equal(mk.styles.writes("trait:selectable"), 1, "and only once");
   });
 });
 

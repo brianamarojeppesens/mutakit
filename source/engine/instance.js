@@ -138,10 +138,12 @@ export class MutakitInstance extends Kernel {
       );
     }
 
-    this.styles.ensureBase();
+    // After the root joins `this.roots`, below — a root in a new document needs
+    // every sheet this instance has already written, not only the base (§10.14).
     if (this.options.theme) this.applyTheme(this.options.theme, node);
 
     this.roots.push(node);
+    this.styles.ensureDocument();
     // Delegation is per root, and a root can be mounted after the service
     // exists — a second root, or one created by a plugin.
     const pointer = this.services.get("pointer");
