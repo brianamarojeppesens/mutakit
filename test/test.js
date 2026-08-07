@@ -713,6 +713,37 @@ describe("leaks (§23.5)", () => {
 });
 
 describe("conformance (§8.7)", () => {
+  test("binding pointer events without keys is a finding (§1.5.5)", (t) => {
+    // §1.5 states it without qualification: every pointer interaction has a
+    // documented keyboard equivalent. The check only looked at a hardcoded
+    // list of trait *names*, so a type that wired `pointerdown` in its own
+    // `create` met the criterion by not being looked at.
+    const grabby = {
+      type: "acme:grabby",
+      a11y: { role: "button" },
+      create: (ctx) => ctx.dom("div"),
+      mount: (ctx) => ctx.own(ctx.listen(ctx.el, "pointerdown", () => {}))
+    };
+    t.ok(
+      Mutakit.conformance(grabby).some((f) => f.code === "MK6001" && f.level === "error"),
+      "an element that binds pointers and declares no keys is an error"
+    );
+    t.equal(
+      Mutakit.conformance({ ...grabby, keys: { Enter: "activate" } }).length, 0,
+      "and declaring the equivalent settles it"
+    );
+
+    // Hover is intent, not action — `focus` is its equivalent and needs no
+    // key, so flagging it would train authors to declare keys that do nothing.
+    const hoverer = {
+      type: "acme:hoverer",
+      a11y: { role: "note" },
+      create: (ctx) => ctx.dom("div"),
+      mount: (ctx) => ctx.own(ctx.listen(ctx.el, "pointerenter", () => {}))
+    };
+    t.equal(Mutakit.conformance(hoverer).length, 0, "hover alone is not a pointer interaction");
+  });
+
   test("every registered type passes its own contract check", (t) => {
     const findings = [];
     for (const entry of Mutakit.registry.list().type) {

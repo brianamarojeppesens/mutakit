@@ -78,12 +78,23 @@ export function conformance(definition, resolved) {
     );
   }
 
-  // ── Keyboard parity for pointer traits (§13.4) ─────────────────────────
+  // ── Keyboard parity for pointer interaction (§1.5.5, §13.4) ────────────
+  // Two ways an element becomes pointer-driven, and only the first was
+  // checked: composing a trait that is, or binding the listeners itself. The
+  // named-trait list cannot see the second, so a type that wires
+  // `pointerdown` in its own `create` satisfied a criterion §1.5 states
+  // without qualification — every pointer interaction has a documented
+  // keyboard equivalent — by not being looked at.
+  //
+  // Hover and enter/leave are deliberately excluded: they express intent
+  // rather than action, and `focus` is their equivalent without any key.
   const pointerTraits = ["draggable", "resizable", "sortable", "selectable"];
-  const usesPointer = (merged.traits || []).some((t) => pointerTraits.includes(t));
-  if (usesPointer && !hasKeys(merged)) {
+  const usesPointerTrait = (merged.traits || []).some((t) => pointerTraits.includes(t));
+  const bindsPointer = /["'`](pointerdown|pointermove|mousedown|dblclick|contextmenu)["'`]/.test(body);
+  if ((usesPointerTrait || bindsPointer) && !hasKeys(merged)) {
+    const how = usesPointerTrait ? "composes a pointer trait" : "binds pointer events";
     findings.push(
-      finding("error", "MK6001", `'${type}' composes a pointer trait but declares no \`keys\`; ${POINTER_TRAIT_HINT}.`)
+      finding("error", "MK6001", `'${type}' ${how} but declares no \`keys\`; ${POINTER_TRAIT_HINT}.`)
     );
   }
 
