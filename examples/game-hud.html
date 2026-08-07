@@ -9,6 +9,13 @@
                font: 14px/1.5 system-ui, sans-serif; overflow: hidden; }
   .stage { position: fixed; inset: 0;
            background: radial-gradient(circle at 50% 40%, #1e293b, #020617 70%); }
+  /* Blips and the prompt caption are the example's own presentation, not the
+     library's: the point is that a HUD element takes ordinary children. */
+  .blip { border-radius: 50%; background: #94a3b8; }
+  .blip--ally { background: #38bdf8; }
+  .blip--enemy { background: #f87171; }
+  .blip--objective { background: #fbbf24; }
+  .prompt-caption { color: #cbd5e1; font-size: 13px; white-space: nowrap; }
 </style>
 </head>
 <body>
@@ -31,12 +38,37 @@ hud.create("hud-bar", { id: "health", at: "top-left", inset: 16,
                         size: { w: 280, h: 20 }, value: health, variant: "health", label: "Health" });
 hud.create("hud-bar", { id: "mana", at: "top-left", inset: { left: 16, top: 44 },
                         size: { w: 220, h: 12 }, value: mana, variant: "mana", label: "Mana" });
-hud.create("minimap", { id: "map", at: "top-right", inset: 16, size: { w: "12gu", h: "12gu" } });
+// `1gu` is min(vw, vh) / 24 (§10.4), so the minimap scales with the viewport.
+// It asked for 12gu, which is half the smaller viewport dimension — a minimap
+// covering a quarter of the screen, drawn over everything else.
+const map = hud.create("minimap", { id: "map", at: "top-right", inset: 16,
+                                    size: { w: "4gu", h: "4gu" } });
+
+// Blips are ordinary children. `minimap` publishes its plane as the content
+// element, so anything created inside is positioned in map space and rotates
+// with it — there is no separate blip API to learn, which is the point.
+const blips = [
+  { left: 46, top: 30, kind: "ally" }, { left: 74, top: 62, kind: "ally" },
+  { left: 30, top: 78, kind: "enemy" }, { left: 96, top: 44, kind: "enemy" },
+  { left: 62, top: 96, kind: "objective" }
+];
+for (const blip of blips) {
+  map.create("pane", { at: "top-left", inset: { left: blip.left, top: blip.top },
+                       size: { w: 7, h: 7 }, class: `blip blip--${blip.kind}` });
+}
+
 hud.create("crosshair", { id: "reticle", at: "center", size: { w: 28, h: 28 } });
 const feed = hud.create("notification-feed", { id: "feed", at: "bottom-right", inset: 16,
                                                size: { w: 320 }, max: 5, ttl: 4000 });
-hud.create("key-prompt", { id: "prompt", at: "bottom", inset: { bottom: 24 },
-                           action: "Interact", keyboard: "E", gamepad: "A" });
+
+// `key-prompt` renders the key cap and nothing else — `action` is its
+// accessible name (role="img"), not visible text. On its own that is a bare
+// "E" floating above the status line, so the caption belongs to the example.
+const prompt = hud.create("stack", { id: "prompt", at: "bottom", inset: { bottom: 24 },
+                                     axis: "x", gap: 8, align: "center",
+                                     size: { w: 150, h: 22 } });
+prompt.create("key-prompt", { action: "Interact", keyboard: "E", gamepad: "A" });
+prompt.create("pane", { content: "Interact", class: "prompt-caption" });
 
 // A world marker that follows a moving object, projected in the PAINT phase.
 let angle = 0;
@@ -60,14 +92,31 @@ for (let i = 0; i < 90; i++) {
 // The fake game loop.
 let frame = 0;
 const events = ["Wave cleared", "Shield restored", "Ammo low", "Objective moved"];
+
+/**
+ * The next frame is booked before any work happens, not after it.
+ *
+ * With `requestAnimationFrame(tick)` as the last statement, one throw anywhere
+ * above it ends the loop permanently and silently: the HUD freezes mid-value
+ * and nothing says why. A game loop is the last place that should be true, and
+ * this file is something people copy.
+ *
+ * `value` is clamped for the same reason. It is declared `min: 0, max: 1`, and
+ * a prop outside its range is a hard MK3005 — correct, and fatal here, because
+ * one unlucky rounding in `0.5 + sin(x) * 0.5` would take the whole HUD down.
+ */
 (function tick() {
+  requestAnimationFrame(tick);
   frame++;
   angle += 0.01;
-  health(0.5 + Math.sin(frame / 40) * 0.5);
-  mana(0.5 + Math.cos(frame / 55) * 0.5);
+  health(clamp01(0.5 + Math.sin(frame / 40) * 0.5));
+  mana(clamp01(0.5 + Math.cos(frame / 55) * 0.5));
   if (frame % 180 === 0) feed.push(events[(frame / 180) % events.length | 0]);
-  requestAnimationFrame(tick);
 })();
+
+function clamp01(value) {
+  return value < 0 ? 0 : value > 1 ? 1 : value;
+}
 </script>
 </body>
 </html>
