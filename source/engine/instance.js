@@ -575,12 +575,23 @@ export class MutakitInstance extends Kernel {
     const host = target.contentEl || target.el;
     if (!host) return target;
 
+    // Text content is part of the tier-2 form (§18.2 — `content` is the
+    // default slot's name), so it has to survive `serialize()`. Nothing kept
+    // it before: a persisted layout restored with every label gone, and an
+    // auto-sized node holding only text came back at zero.
+    //
+    // Only the serializable forms are recorded. An element spec becomes real
+    // children and round-trips as `children`; a DOM node, a function, or a
+    // promise is no more serializable than a function prop, and is skipped for
+    // the same reason.
     if (content == null || content === false) {
       dom.setText(host, "");
+      target.content = undefined;
       return target;
     }
     if (typeof content === "string" || typeof content === "number") {
       dom.setText(host, content); // never parsed as HTML (§21.4)
+      target.content = content;
       return target;
     }
     if (typeof content === "function") {

@@ -97,6 +97,7 @@ export class Persistence {
       if (node.algorithmOptions) out.algorithmOptions = { ...node.algorithmOptions };
     }
     if (node.traits.size) out.traits = [...node.traits.keys()];
+    if (node.content !== undefined) out.content = node.content;
 
     for (const hook of node.definition ? node.definition.hooks.serialize : []) {
       const extra = this.mk.guard(node, "serialize", hook, [this.mk.contextFor(node)]);

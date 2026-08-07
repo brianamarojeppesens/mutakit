@@ -473,6 +473,38 @@ describe("persistence (§19)", () => {
     t.deepEqual(second.mk.snapshot(), mk.snapshot());
   });
 
+  test("a restored layout resolves to the same geometry, text and all (§19.1)", (t) => {
+    // §19.1 says `serialize()` emits the tier-2 form and `restore()` rebuilds
+    // it. The check that matters is not that the JSON looks right but that the
+    // rebuilt tree *lays out* the same — which is how this found that `content`
+    // was never serialized at all: every label came back empty, and a node
+    // sized to its own text came back at zero.
+    const first = fixture(t);
+    first.app.dock({
+      regions: { top: { id: "s-bar", size: 40 }, start: { id: "s-side", size: 220 }, center: { id: "s-main" } }
+    });
+    first.mk.byId("s-main").split({
+      axis: "y", gutter: { size: 6, draggable: true },
+      panes: [{ id: "s-top", size: "1fr", min: 60 }, { id: "s-bottom", size: 180, min: 40 }]
+    });
+    first.mk.byId("s-side").create("pane", { id: "s-tree", content: "files" });
+    first.mk.tick();
+
+    const before = first.mk.snapshot();
+    const json = first.mk.serialize();
+
+    const second = fixture(t);
+    second.mk.restore(json);
+    second.mk.tick();
+    const after = second.mk.snapshot();
+
+    t.deepEqual(Object.keys(after).sort(), Object.keys(before).sort(), "every node came back");
+    for (const id of Object.keys(before)) {
+      t.deepEqual(after[id].map(Math.round), before[id].map(Math.round), `${id} resolves identically`);
+    }
+    t.equal(second.mk.byId("s-tree").el.textContent, "files", "and its text came with it");
+  });
+
   test("an unregistered type restores as a placeholder that round-trips (§19.1)", (t) => {
     const { mk } = fixture(t);
     mk.use(persistencePlugin);
