@@ -7,17 +7,22 @@ docs, and devtools from one declaration, so these pages cannot drift (§24).
 
 - [`group`](./group.md)
 - [`pane`](./pane.md)
+- [`resizer`](./resizer.md)
 - [`spacer`](./spacer.md)
+- [`split`](./split.md)
 - [`stack`](./stack.md)
 - [`surface`](./surface.md)
 
 ## Layout algorithms
 
 - `anchor`
+- `split`
 - `stack`
 
 ## Traits
 
+- `collapsible`
+- `draggable`
 - `focusable`
 
 ## Diagnostics

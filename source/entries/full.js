@@ -6,7 +6,7 @@
  * bundler no longer pays for the rest. The `<script>`-tag audience still gets
  * the whole catalog, which is what they asked for by choosing this file.
  */
-import { Mutakit } from "./core.js";
+import { Mutakit } from "./dock.js";
 
 export { Mutakit };
 export default Mutakit;

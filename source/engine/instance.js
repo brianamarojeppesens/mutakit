@@ -942,13 +942,6 @@ export class MutakitInstance extends Kernel {
       ? validateAll(algorithm.schema, opts, { strict: false }).values
       : { ...opts };
 
-    if (algorithm.setup) {
-      this.guard(target, `layout:${name}.setup`, algorithm.setup, [
-        target,
-        makeLayoutContext(target, this)
-      ]);
-    }
-
     const created = [];
     const describedChildren = algorithm.childrenFrom ? algorithm.childrenFrom(opts) : null;
     if (describedChildren) {
@@ -956,6 +949,15 @@ export class MutakitInstance extends Kernel {
         const { type = "pane", ...rest } = spec;
         created.push(this.create(type, rest, target));
       }
+    }
+
+    // After the children, not before: `split` inserts a gutter between every
+    // adjacent pair, and it cannot do that until the pairs exist.
+    if (algorithm.setup) {
+      this.guard(target, `layout:${name}.setup`, algorithm.setup, [
+        target,
+        makeLayoutContext(target, this)
+      ]);
     }
 
     for (const child of target.children) this._validateLayoutProps(child);

@@ -167,7 +167,13 @@ export const BASE_CSS = css`
     contain: layout style;
   }
 
-  /* Algorithms that put children in flow own their boxes (§9.1). */
+  /*
+   * Algorithms that put children in flow own the whole box, not just its
+   * position (§9.1) — size included. Leaving the width var-read in place here
+   * would let the engine's computed number override the track the browser
+   * resolved, which is P1 exactly backwards: a split's grid tracks would be
+   * inert and every drag would have to be computed in JavaScript.
+   */
   [data-mk-algorithm="stack"] > .mk-node,
   [data-mk-algorithm="flow"] > .mk-node,
   [data-mk-algorithm="grid"] > .mk-node,
@@ -176,8 +182,6 @@ export const BASE_CSS = css`
     position: relative;
     left: auto;
     top: auto;
-  }
-  [data-mk-algorithm="flow"] > .mk-node {
     width: auto;
     height: auto;
   }

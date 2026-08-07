@@ -28,7 +28,8 @@ const manifest = JSON.parse(await readFile(path.join(ROOT, "unpinned.json"), "ut
 /** One entry file per §4.2 preset. The imports *are* the file list (§22.2). */
 const PRESETS = [
   { name: "mutakit", entry: "source/entries/full.js", label: "everything" },
-  { name: "mutakit.core", entry: "source/entries/core.js", label: "core" }
+  { name: "mutakit.core", entry: "source/entries/core.js", label: "core" },
+  { name: "mutakit.dock", entry: "source/entries/dock.js", label: "core + splits + persistence" }
 ];
 
 const banner = (name) =>

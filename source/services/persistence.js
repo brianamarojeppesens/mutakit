@@ -49,9 +49,17 @@ export class Persistence {
     const opts = options || {};
     const target = resolve(mk, scope) || mk.root;
     if (!target) return null;
+    // The scope's *own* algorithm travels with the document. Without it, a
+    // layout whose split lives on the root — which is what `app.split({…})`
+    // produces — restores as a bare list of panes with no gutters and no
+    // tracks, which looks like data loss and is.
     return {
       schema: SCHEMA_VERSION,
       mutakit: mk.version,
+      frame: {
+        algorithm: target.algorithm || "anchor",
+        algorithmOptions: stripInternal(target.algorithmOptions)
+      },
       tree:
         target === mk.root
           ? target.children.map((child) => this._node(child, opts))
@@ -137,12 +145,26 @@ export class Persistence {
     }
 
     const parent = resolve(mk, opts.into) || mk.root;
+    if (saved.frame && saved.frame.algorithm && mk.registry.has("layout", saved.frame.algorithm)) {
+      parent.algorithm = saved.frame.algorithm;
+      parent.algorithmOptions = saved.frame.algorithmOptions || {};
+    }
     const tree = saved.tree || saved;
     const specs = Array.isArray(tree) ? tree : [tree];
     const restored = [];
     for (const spec of specs) {
+      // A gutter is not data: `split.setup` recreates one per adjacent pair,
+      // and restoring the saved ones too would double them.
+      if (spec && spec.type === "resizer") continue;
       const handle = this._restore(spec, parent, opts);
       if (handle) restored.push(handle);
+    }
+    const algorithm = mk.registry.get("layout", parent.algorithm);
+    if (algorithm && algorithm.setup) {
+      mk.guard(parent, `layout:${parent.algorithm}.setup`, algorithm.setup, [
+        parent,
+        { mk, node: parent, frame: parent.frame }
+      ]);
     }
     // Restore before first paint applies during that frame's ARRANGE, so a
     // saved layout never renders at its defaults and then visibly snaps (§19.1).
@@ -317,6 +339,13 @@ export class Persistence {
       }
     };
   }
+}
+
+/** Drop the normalization marker so a saved document stays plain data. */
+function stripInternal(options) {
+  if (!options) return null;
+  const { __normalized, panes, ...rest } = options;
+  return rest;
 }
 
 function resolve(mk, value) {

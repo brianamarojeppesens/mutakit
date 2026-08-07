@@ -87,12 +87,33 @@ algorithms named in the message.
 reparenting that would create a cycle.
 **Fix.** The message names the specific conflict.
 
+### MK2011 — Self-positioning child inside a flow-owning algorithm
+**Cause.** §9.1's rule: **the parent's layout algorithm owns a child's box,
+unless that child declares `positioning: 'self'`.** `draggable` and `resizable`
+set that automatically when they attach, which makes them a contradiction
+inside `stack`, `split`, `grid`, and `dock` — the algorithm computes a track
+for something that refuses to sit in it. Left unspecified, this is where UI
+libraries misbehave silently: the element jitters or snaps back with no
+explanation.
+**Fix.** Two real ones, both named in the message: use the `sortable` trait to
+reorder *within* the flow, or move the child into a `free`/`anchor` parent to
+move it *freely*. A pane inside a split is resized by its gutters, not by
+corner handles — see `split`'s own `min`/`max`.
+
 ### MK2012 — Unknown key in a child's `layout` bag
 **Cause.** The parent algorithm's `childProps` schema does not declare this key.
 The value is **retained but ignored**, so moving the child back to a compatible
 parent restores it (§7.0).
 **Fix.** Check the accepted keys named in the message. This most often means a
 typo, or a child that has been reparented into a different algorithm.
+
+### MK2013 — Split pane minimums exceed the container
+**Cause.** Below Σ minimums + gutters there is no arrangement that satisfies
+every bound. CSS holds the minimums and lets the container overflow, which
+`split` treats as defined behaviour (§27.2 R1) rather than as a failure.
+**Fix.** None is required — but if the overflow is unwanted, lower a `min`, or
+collapse a pane. Reported once per split so a resize sweep does not flood the
+console.
 
 ---
 

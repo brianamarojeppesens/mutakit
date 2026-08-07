@@ -5,10 +5,11 @@
  *
  * The pure tier lives in `test/unit/` and runs under `node --test`.
  */
-import { describe, fakeClock, start, teardown, test } from "./harness.js";
+import { describe, fakeClock, key, start, teardown, test } from "./harness.js";
 import { Mutakit } from "../source/entries/full.js";
 import { persistencePlugin } from "../source/services/persistence.js";
 import { counters } from "../source/core/dom.js";
+import * as mkSplit from "../source/layout/split.js";
 
 /** Mount a fresh, deterministically sized instance for one test. */
 function fixture(t, options) {
@@ -527,6 +528,234 @@ describe("conformance (§8.7)", () => {
     t.deepEqual(findings, [], "core follows the rules it asks plugins to follow (P3)");
   });
 });
+
+describe("layout: split (§7.3)", () => {
+  /** The exact three-pane layout from the user's brief (§5.9). */
+  function brief(t) {
+    const { mk, app } = fixture(t);
+    const [left, right] = app.split({
+      axis: "x",
+      gutter: { size: 6, draggable: true },
+      panes: [
+        { id: "left", size: 100, min: 64, max: "40%" },
+        { id: "right", size: "1fr" }
+      ]
+    });
+    const [stage, bottom] = right.split({
+      axis: "y",
+      gutter: { size: 6, draggable: true },
+      panes: [
+        { id: "stage", size: "1fr" },
+        { id: "bottom", size: 150, min: 80, collapsible: { at: 40, to: 0 } }
+      ]
+    });
+    mk.tick();
+    return { mk, app, left, right, stage, bottom };
+  }
+
+  test("the user's brief resolves to the geometry they described", (t) => {
+    const { left, right, stage, bottom } = brief(t);
+    t.close(left.node.computed.w, 100);
+    t.close(right.node.computed.w, 894, 1);
+    t.close(right.node.computed.x, 106);
+    t.close(bottom.node.computed.h, 150);
+    t.close(stage.node.computed.h, 644, 1);
+    t.close(bottom.node.computed.y, 650, 1);
+  });
+
+  test("a gutter is a real grid track, with separator semantics", (t) => {
+    const { app } = brief(t);
+    const gutter = app.node.children.find((n) => n.type === "resizer");
+    t.ok(gutter, "one gutter between the two panes");
+    t.equal(gutter.el.getAttribute("role"), "separator");
+    t.equal(gutter.el.getAttribute("aria-orientation"), "vertical");
+    t.equal(gutter.el.getAttribute("aria-valuenow"), "100");
+    t.equal(gutter.el.getAttribute("aria-valuemin"), "64");
+    t.equal(gutter.el.getAttribute("aria-controls"), "left");
+    t.equal(gutter.el.getAttribute("tabindex"), "0", "and it is reachable by keyboard");
+    t.close(gutter.computed.w, 6);
+  });
+
+  test("the container compiles to grid, and the idle path writes no JavaScript geometry", (t) => {
+    const { mk, app } = brief(t);
+    t.equal(getComputedStyle(app.el).display, "grid");
+    const template = app.el.style.getPropertyValue("grid-template-columns");
+    t.ok(template.includes("var(--mk-gutter"), "the gutter is a track");
+    t.ok(template.includes("clamp(") || template.includes("max("), "and the pane carries its bounds");
+
+    const writes = mk.compiler.writes;
+    mk.tick();
+    t.equal(mk.compiler.writes, writes, "a second idle frame writes nothing at all");
+  });
+
+  test("neighbor: the drag is clamped by both panes' bounds", (t) => {
+    const { mk, app } = brief(t);
+    const model = app.node.splitModel;
+    const wide = splitDrag(app, 0, 300);
+    t.close(wide.sizes[0], 400, 1, "40% of 1000 is the pane's own ceiling");
+    const narrow = splitDrag(app, 0, -300);
+    t.close(narrow.sizes[0], 64, 1, "and its minimum stops it going further");
+    t.close(narrow.sizes[0] + narrow.sizes[1], model.content, 1, "tracks always sum to the content box");
+  });
+
+  test("distribute: the CSS and JS paths agree across a swept drag", async (t) => {
+    // The M2 invariant (§7.3): a group whose panes declare no `max` must
+    // produce identical track sizes on both paths. It is what keeps the two
+    // implementations from drifting, and what lets a pane gain a `max` at
+    // runtime without a visible change in behaviour.
+    const { mk, app } = fixture(t);
+    app.split({
+      axis: "x",
+      resizeMode: "distribute",
+      gutter: { size: 6, draggable: true },
+      panes: [
+        { id: "a", size: 200, min: 80 },
+        { id: "b", size: "1fr", min: 60 },
+        { id: "c", size: "1fr", min: 60 },
+        { id: "d", size: "2fr", min: 60 }
+      ]
+    });
+    mk.tick();
+
+    const model = app.node.splitModel;
+    t.ok(mkSplit.canUseCSSPath(model, 0, "distribute"), "no maxima, so CSS is legal here");
+
+    const gutter = app.node.children.find((n) => n.type === "resizer");
+    const mismatches = [];
+    for (let delta = -160; delta <= 320; delta += 40) {
+      const js = mkSplit.resolveDrag(model, 0, delta, "distribute", model.sizes);
+
+      // The CSS path: write the unclamped value and let the browser resolve.
+      app.el.style.setProperty("--mk-w-0", `${model.sizes[0] + delta}px`);
+      const css = model.tracks.map((track) => track.pane.el.getBoundingClientRect().width);
+
+      css.forEach((width, i) => {
+        if (Math.abs(width - js.sizes[i]) > 1) {
+          mismatches.push(`Δ${delta} pane ${i}: css ${width.toFixed(1)} vs js ${js.sizes[i].toFixed(1)}`);
+        }
+      });
+    }
+    app.el.style.removeProperty("--mk-w-0");
+    t.deepEqual(mismatches, [], "every swept position agrees");
+  });
+
+  test("distribute: a finite max on a flexible pane forces the JS path", (t) => {
+    const { mk, app } = fixture(t);
+    app.split({
+      axis: "x",
+      resizeMode: "distribute",
+      panes: [
+        { id: "a", size: 200 },
+        { id: "b", size: "1fr", max: 300 },
+        { id: "c", size: "1fr" }
+      ]
+    });
+    mk.tick();
+    const model = app.node.splitModel;
+    t.equal(mkSplit.canUseCSSPath(model, 0, "distribute"), false, "an fr maximum is uncapped in CSS");
+
+    // And the JS path honours the ceiling the CSS path would overrun.
+    const result = mkSplit.resolveDrag(model, 0, -300, "distribute", model.sizes);
+    t.ok(result.sizes[1] <= 300 + 1, `pane b stayed within its max (${result.sizes[1].toFixed(1)})`);
+  });
+
+  test("push: the cascade walks past panes that hit their minimum", (t) => {
+    const { mk, app } = fixture(t);
+    app.split({
+      axis: "x",
+      resizeMode: "push",
+      panes: [
+        { id: "a", size: 200, min: 50 },
+        { id: "b", size: 200, min: 150 },
+        { id: "c", size: 200, min: 50 }
+      ]
+    });
+    mk.tick();
+    const model = app.node.splitModel;
+    const result = mkSplit.resolveDrag(model, 0, 200, "push", model.sizes);
+    t.close(result.sizes[1], 150, 1, "b stops at its minimum");
+    t.ok(result.sizes[2] < 200, "and the rest cascades to c");
+    const before = model.sizes.reduce((s, n) => s + n, 0);
+    t.close(result.sizes.reduce((s, n) => s + n, 0), before, 1, "the total is conserved");
+  });
+
+  test("collapse: below the threshold, with size memory on restore", (t) => {
+    const { mk, bottom, app } = brief(t);
+    const inner = app.node.children.find((n) => n.type !== "resizer" && n.id === "right");
+    const gutter = inner.children.find((n) => n.type === "resizer");
+    const handle = mk.handleFor(gutter);
+
+    handle.nudge(130);
+    mk.tick();
+    t.equal(bottom.node.layoutProps.collapsed, true, "dragging past `at` collapses");
+    t.close(bottom.node.computed.h, 0, 1);
+
+    handle.toggle();
+    mk.tick();
+    t.equal(bottom.node.layoutProps.collapsed, false);
+    t.ok(bottom.node.computed.h > 0, "and it comes back");
+  });
+
+  test("keyboard: arrows resize, Shift multiplies, Enter toggles (§7.3, P5)", (t) => {
+    const { mk, app, left } = brief(t);
+    const gutter = app.node.children.find((n) => n.type === "resizer");
+    const before = left.node.computed.w;
+
+    key(gutter.el, "ArrowRight");
+    mk.tick();
+    t.close(left.node.computed.w, before + 8, 1, "one step");
+
+    key(gutter.el, "ArrowRight", { shiftKey: true });
+    mk.tick();
+    t.close(left.node.computed.w, before + 48, 1, "five steps");
+
+    key(gutter.el, "Home");
+    mk.tick();
+    t.close(left.node.computed.w, 64, 1, "Home goes to the minimum");
+  });
+
+  test("pane sizes persist across serialize and restore", (t) => {
+    const { mk, app, left } = brief(t);
+    mk.use(persistencePlugin);
+    const gutter = app.node.children.find((n) => n.type === "resizer");
+    mk.handleFor(gutter).nudge(120);
+    mk.tick();
+    const dragged = left.node.computed.w;
+    t.close(dragged, 220, 1);
+
+    const doc = mk.serialize();
+    const second = fixture(t);
+    second.mk.use(persistencePlugin);
+    second.mk.restore(doc, { allow: "any" });
+    second.mk.tick();
+
+    const restored = second.mk.byId("left");
+    t.close(restored.node.computed.w, dragged, 1, "the layout comes back where it was left");
+  });
+
+  test("a draggable pane inside a split reports MK2011 with the two real fixes", (t) => {
+    const { mk, app } = fixture(t);
+    const records = [];
+    Mutakit.diagnostics.sink((record) => records.push(record));
+    t.cleanup(() => Mutakit.diagnostics.sink(null));
+
+    const [first] = app.split({ panes: [{ id: "p1", size: "1fr" }, { id: "p2", size: "1fr" }] });
+    mk.tick();
+    first.trait("draggable", {});
+
+    const found = records.find((r) => r.code === "MK2011");
+    t.ok(found, "the arbitration rule fires at attach time");
+    t.ok(/sortable/.test(found.message) && /free/.test(found.message), "and names both fixes");
+  });
+});
+
+/** Drive a drag through the algorithm, the way the resizer does. */
+function splitDrag(app, index, delta) {
+  const model = app.node.splitModel;
+  const mode = app.node.algorithmOptions.resizeMode;
+  return mkSplit.resolveDrag(model, index, delta, mode, model.sizes);
+}
+
 
 function rect(handle) {
   const r = handle.node.computed;

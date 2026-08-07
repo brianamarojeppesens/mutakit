@@ -4,6 +4,59 @@ All notable changes to Mutakit are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] — M2: splits (S1 substantially working)
+
+The `split` algorithm with all of §7.3's interaction detail, the `resizer`
+element, the `draggable` and `collapsible` traits, keyboard resizing, and
+persistence of pane sizes (PLAN.md §26 M2).
+
+### Added
+
+- **`split`** (§7.3). Compiles to CSS Grid with an explicit track list;
+  gutters are real grid tracks, so they participate in track sizing rather than
+  being overlaid. All three resize modes, with the CSS-versus-JS path rule from
+  the normative fallback: `neighbor` and the common `distribute` case write one
+  *unclamped* custom property per pointer move and let the browser apply every
+  bound; `push`, and `distribute` against a finite `max`, walk the cascade in
+  JavaScript. The idle path performs no JavaScript geometry at all — asserted
+  by a test that ticks twice and requires the second frame to write nothing.
+- **The path-equivalence test the milestone asks for.** A four-pane group
+  declaring no `max` is swept from −160px to +320px, and the browser's resolved
+  track widths are compared against the JS path's at every position. It is what
+  keeps the two implementations from drifting, and it is what lets a pane gain
+  a `max` at runtime with no visible change in behaviour.
+- **`resizer`** (§11.1) with the full interaction contract: pointer capture,
+  hit slop widened for coarse pointers from the metrics snapshot, live and
+  deferred modes, the clamping cascade, collapse with size memory, and a
+  keyboard equivalent — arrows by `step`, `Shift` by five, `Home`/`End` to the
+  bounds, `Enter` to toggle. `role="separator"` with a live value range.
+- **`draggable` and `collapsible`** (§9), and §9.1's arbitration rule with it:
+  attaching `draggable` inside a flow-owning algorithm reports MK2011 at attach
+  time and names both real fixes rather than letting the element jitter.
+- **`mutakit.dock.js`** — the first preset that is genuinely smaller than the
+  full bundle.
+
+### Fixed
+
+- **Flow-owning algorithms did not own their children's size.** The base
+  stylesheet reset `position`/`left`/`top` for `stack`, `split`, `grid`, `dock`,
+  and `flow`, but left `width: var(--mk-w)` in place — so the engine's computed
+  number overrode the grid track the browser had resolved. Every split drag
+  looked correct and was entirely JavaScript-driven; the grid tracks were inert.
+  Caught by the equivalence sweep, which is exactly the test that could catch it.
+- **`distribute` distributed the requested delta rather than the granted one.**
+  When the dragged pane clamped at its own bound, the flexible set still
+  absorbed the full request, and the tracks stopped summing to the container
+  (1022px in a 982px box). Pane *k*'s bounds are now applied first and the set
+  absorbs what it actually gave up, re-spreading if the set turns out to have
+  less capacity than asked.
+- **A collapsible pane could never be collapsed by dragging.** Its `min`
+  clamped the drag above `collapsible.at`, so the threshold the option exists to
+  detect was unreachable. A drag now has its own floor at the collapsed size.
+- A backtick inside a comment *inside* a tagged template literal ended the
+  template. The stylesheet is JavaScript, so its comments live under JavaScript
+  rules.
+
 ## [0.4.0] — M1: geometry and engine
 
 `Len`, rect algebra, anchors, edge constraints, insets, coordinate spaces, the
