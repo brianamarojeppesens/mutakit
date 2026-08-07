@@ -96,9 +96,16 @@ const minifyCSSTemplates = {
 function squeezeTemplates(source) {
   let out = "";
   let index = 0;
-  // `(?<![.\w])` matters: `` `layout:${name}.css` `` contains "css" followed
-  // by a backtick and would otherwise be read as the start of a template.
-  const opener = /(?:(?<![.\w])css|^\s*styles:\s*)`/gm;
+  // The lookbehind matters, and has now been wrong twice in different ways.
+  // `` `layout:${name}.css` `` contains "css" followed by a backtick, so `.`
+  // and word characters must disqualify it. So must a *backtick*: an ordinary
+  // doc comment containing `` `css` `` — the word, quoted — read as the start
+  // of a tagged template and silently corrupted everything after it.
+  //
+  // That failure mode is the dangerous one: the source parses, the lint that
+  // imports every module passes, and only the built artifact is wrong. The
+  // lint now checks this directly rather than waiting for the build to fail.
+  const opener = /(?:(?<![.\w`])css|^\s*styles:\s*)`/gm;
   let match;
   while ((match = opener.exec(source))) {
     const start = match.index + match[0].length;
