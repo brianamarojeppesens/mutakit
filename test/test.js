@@ -329,11 +329,26 @@ describe("layout: anchor (§7.1)", () => {
   test("the inset stack shrinks what children resolve against (§5.7)", (t) => {
     const { mk, app } = fixture(t);
     app.node.insets.set("chrome", { top: 48 });
+    // Two contributions on one edge compose by max, not by sum — the whole
+    // point of the mechanism, since two overlays each claiming 16px from the
+    // bottom should yield 16. The unit suite checks the algebra; this checks
+    // that a real frame resolves against it.
+    app.node.insets.set("toolbar", { top: 30, bottom: 16 });
+    app.node.insets.set("keyboard", { bottom: 16 });
+
     const pinned = app.create("pane", { at: "top-left", size: { w: 100, h: 100 } });
     const ignoring = app.create("pane", { at: "top-left", size: { w: 100, h: 100 }, insets: false });
+    const filling = app.create("pane", { id: "ins-fill", left: 0, right: 0, top: 0, bottom: 0 });
+    // The named-subset form: this one respects `chrome` and nothing else.
+    const onlyChrome = app.create("pane", {
+      id: "ins-one", left: 0, right: 0, top: 0, bottom: 0, insets: ["chrome"]
+    });
     mk.tick();
-    t.equal(pinned.node.computed.y, 48);
+
+    t.equal(pinned.node.computed.y, 48, "max(48, 30), not 78");
     t.equal(ignoring.node.computed.y, 0, "insets: false resolves against the raw frame");
+    t.deepEqual(rect(filling), [0, 48, 1000, 800 - 48 - 16], "and both edges compose by max");
+    t.deepEqual(rect(onlyChrome), [0, 48, 1000, 800 - 48], "insets: ['chrome'] takes only that one");
   });
 
   test("a layout snapshot is a readable set of numbers (§23.2)", (t) => {
