@@ -63,6 +63,12 @@ export const modal = {
 
   create(ctx, inherited) {
     const el = inherited || ctx.dom("div", null, null);
+    // Where the platform offers it, the browser's own top layer gives correct
+    // stacking above *everything* — including other libraries' overlays and
+    // anything with a `z-index` of nine million — for free (§16.2). The
+    // fallback is a portal into the instance's layer root, behind the same
+    // API, so an author never sees which one they got.
+    ctx.state.topLayer = ctx.mk.metrics.current.features.dialog && ctx.props.dismiss === "modal";
     if (ctx.props.title) {
       const id = `${ctx.node.id || ctx.node.type}-title`;
       const header = dom.el("h2", { class: "mk-modal__header", id, text: ctx.props.title });
@@ -78,8 +84,15 @@ export const modal = {
 
   mount(ctx) {
     const layers = ctx.service("layers");
+    if (ctx.state.topLayer) promoteToTopLayer(ctx);
     if (layers) {
       layers.add(ctx.node, ctx.node.layer);
+      // The top layer is used for *stacking*, not for its scrim. Each host
+      // dialog paints its own `::backdrop`, so three stacked modals would paint
+      // three — while §16.2 requires one shared, reference-counted backdrop
+      // beneath the topmost. `::backdrop` is therefore transparent and the
+      // layer service keeps supplying the single scrim, which satisfies both
+      // halves of that section rather than trading one for the other.
       if (ctx.props.backdrop) {
         layers.requestBackdrop(ctx.node, {
           onDismiss:
@@ -109,6 +122,25 @@ export const modal = {
   },
 
   styles: css`
+    /*
+     * The host is a positioning context only: no background, no padding, no
+     * size of its own. Everything visible is still the element's, so the two
+     * paths look identical.
+     */
+    .mk-top-layer {
+      border: 0;
+      padding: 0;
+      margin: 0;
+      max-width: none;
+      max-height: none;
+      width: 100%;
+      height: 100%;
+      background: none;
+      overflow: visible;
+    }
+    .mk-top-layer::backdrop {
+      background: transparent;
+    }
     .mk-modal {
       display: flex;
       flex-direction: column;
@@ -139,6 +171,39 @@ export const modal = {
     }
   `
 };
+
+/**
+ * Move the element into the browser's top layer.
+ *
+ * A `<dialog>` cannot simply *be* the element — the type may be extended, and
+ * `showModal()` has opinions about sizing and centring that fight §5's
+ * geometry. So a host dialog is opened and the element is adopted into it: the
+ * platform supplies stacking, `::backdrop`, and its own Escape; Mutakit keeps
+ * the box.
+ */
+function promoteToTopLayer(ctx) {
+  const host = dom.el("dialog", { class: "mk-top-layer" });
+  dom.body().appendChild(host);
+  host.appendChild(ctx.el);
+  try {
+    host.showModal();
+  } catch (error) {
+    // Already open, detached, or a platform that changed its mind. The portal
+    // fallback is correct in every one of those cases and nothing else needs
+    // to know which path it got.
+    ctx.state.topLayer = false;
+    dom.remove(host);
+    return;
+  }
+  // The platform's own Escape would close the host directly, skipping the
+  // dismissal policy, the `beforeclose` veto, and focus restoration (§9).
+  ctx.own(dom.listen(host, "cancel", (event) => event.preventDefault()));
+  ctx.own(() => {
+    if (host.open) host.close();
+    dom.remove(host);
+  });
+  ctx.setState("top-layer", true);
+}
 
 /** `dialog` — `modal` plus header/body/footer slots and a standard button row. */
 export const dialog = {

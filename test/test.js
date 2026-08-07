@@ -803,6 +803,52 @@ describe("overlays (§11.2, §16)", () => {
     t.equal(app.el.querySelectorAll("[data-mk-backdrop]").length, 0, "and goes with the last one");
   });
 
+  test("a modal uses the browser's top layer where it exists (§16.2)", async (t) => {
+    const { mk, app } = fixture(t);
+    const modal = app.create("modal", { id: "top", title: "Top layer" });
+    mk.tick();
+
+    const supported = mk.metrics.current.features.dialog;
+    t.equal(modal.node.state.topLayer, supported, "taken exactly when the platform offers it");
+
+    if (supported) {
+      const host = modal.el.closest("dialog.mk-top-layer");
+      t.ok(host, "the element was adopted into a host dialog");
+      t.equal(host.open, true);
+      t.equal(modal.el.getAttribute("data-mk-top-layer"), "");
+      // The top layer is taken for its *stacking*, not for its scrim: one host
+      // dialog per modal would paint one `::backdrop` per modal, and §16.2 asks
+      // for a single reference-counted backdrop under the topmost. So
+      // `::backdrop` is transparent and the layer service still supplies it.
+      t.equal(app.el.querySelectorAll("[data-mk-backdrop]").length, 1,
+        "the one shared backdrop is still the layer service's");
+      const second = app.create("modal", { id: "top2", title: "Above" });
+      mk.tick();
+      t.equal(app.el.querySelectorAll("[data-mk-backdrop]").length, 1,
+        "and two stacked top-layer modals still produce exactly one");
+      second.close();
+      await mk.flush({ animations: false });
+      mk.tick();
+
+      modal.close();
+      await mk.flush({ animations: false });
+      mk.tick();
+      t.equal(document.querySelector("dialog.mk-top-layer"), null, "and the host goes with it");
+    }
+  });
+
+  test("a light-dismiss overlay takes the portal path, and still stacks correctly", (t) => {
+    const { mk, app } = fixture(t);
+    // `dismiss: 'light'` is not a platform modal, so it portals — the same API
+    // either way, which is the point of putting both behind one type.
+    const modal = app.create("modal", { id: "portal", title: "Portal", dismiss: "light" });
+    mk.tick();
+    t.equal(modal.node.state.topLayer, false);
+    t.equal(modal.el.closest("dialog.mk-top-layer"), null);
+    t.equal(app.el.querySelectorAll("[data-mk-backdrop]").length, 1, "the layer service supplies one");
+    t.ok(Number(modal.el.style.zIndex) >= 500, "in the modal band");
+  });
+
   test("Escape dismisses the topmost overlay only, and a veto stops it", async (t) => {
     const { mk, app } = fixture(t);
     const modal = app.create("modal", { id: "guarded", title: "Unsaved" });

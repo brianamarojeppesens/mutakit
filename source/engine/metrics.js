@@ -52,6 +52,12 @@ export function emptySnapshot() {
 export class Metrics {
   constructor() {
     this.current = emptySnapshot();
+    // Feature detection is cached, forces no reflow, and is *true before the
+    // first frame* — unlike everything else here, which needs a READ phase to
+    // measure. Leaving it empty until then meant `create` and `mount` saw a
+    // browser with no capabilities at all, and three subsystems in a row
+    // silently took their fallback path while appearing to work.
+    this.current.features = dom.detectFeatures();
     this.previous = this.current;
     this._queries = null;
     this._probe = null;

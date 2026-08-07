@@ -114,17 +114,9 @@ export class MotionService {
     }
   }
 
-  /**
-   * True when the platform can animate.
-   *
-   * Read from `detectFeatures()` rather than the metrics snapshot: an enter
-   * animation is decided during `mount`, which can happen before the first
-   * READ phase has ever run — and a snapshot that has not been taken reports
-   * no capabilities at all, so every first-frame animation was silently
-   * skipped. Detection is cached and forces no reflow.
-   */
+  /** True when the platform can animate. */
   get enabled() {
-    return !!dom.detectFeatures().webAnimations;
+    return !!this.mk.metrics.current.features.webAnimations;
   }
 
   get reduced() {
