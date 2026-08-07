@@ -57,7 +57,20 @@ const CASES = [
   ["notification-feed", { id: "a11y-feed" }],
   ["drawer", { id: "a11y-drawer", edge: "end", size: 200, title: "A drawer", backdrop: false }],
   ["scroll", { id: "a11y-scroll", label: "Scrollable", size: { w: 200, h: 60 } }],
-  ["hud-marker", { id: "a11y-marker", label: "Objective", project: () => ({ x: 10, y: 10 }) }]
+  ["hud-marker", { id: "a11y-marker", label: "Objective", project: () => ({ x: 10, y: 10 }) }],
+  ["text-block", { content: "A paragraph.", variant: "body" }],
+  ["icon", { name: "star", label: "Favourite" }],
+  ["divider", {}],
+  ["progress", { id: "a11y-progress", value: 0.4, label: "Uploading" }],
+  ["progress", { id: "a11y-progress-2", indeterminate: true, label: "Working" }],
+  ["meter", { id: "a11y-meter", value: 30, min: 0, max: 100, low: 20, label: "Disk" }],
+  ["spinner", { label: "Loading results" }],
+  ["empty-state", { id: "a11y-empty", title: "Nothing here", description: "Add an item to begin.",
+                    action: { label: "Add" } }],
+  ["list", { id: "a11y-list", label: "Files", items: ["one", "two", "three"], selection: "multiple" }],
+  ["tree", { id: "a11y-tree", label: "Explorer",
+             data: [{ id: "src", label: "src", children: [{ id: "a", label: "a.js" }] }],
+             expanded: ["src"], selected: "src" }]
 ];
 
 /** Controls need a label, and a label needs a field — so pair them. */

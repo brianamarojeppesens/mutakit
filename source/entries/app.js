@@ -19,6 +19,7 @@ import { PointerService } from "../services/pointer.js";
 import { NATIVE_CONTROLS } from "../elements/forms/controls.js";
 import { COMPOSITE_CONTROLS } from "../elements/forms/composite.js";
 import { FORM_ELEMENTS } from "../elements/forms/form.js";
+import { DISPLAY_ELEMENTS } from "../elements/display/display.js";
 
 export function installOverlays(mk) {
   mk.trait(dismissible, { replace: true });
@@ -30,7 +31,8 @@ export function installOverlays(mk) {
     ...POPOVER_ELEMENTS,
     ...NATIVE_CONTROLS,
     ...COMPOSITE_CONTROLS,
-    ...FORM_ELEMENTS
+    ...FORM_ELEMENTS,
+    ...DISPLAY_ELEMENTS
   ]) {
     mk.define(definition, { replace: true });
   }

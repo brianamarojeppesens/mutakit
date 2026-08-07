@@ -13,7 +13,7 @@
 ## The finding
 
 **Core measures 29.87 KB gzipped against §20.1's 8.5 KB budget — 3.5× over.**
-The full preset measures 67.47 KB against 32 KB — 2.1× over.
+The full preset measures 70.15 KB against 32 KB — 2.2× over.
 
 PLAN.md §20.5 point 6 asks for exactly this to be recorded rather than absorbed:
 
@@ -37,8 +37,8 @@ proposes rests on evidence rather than on the shortfall being inconvenient.
 | Elements (Tier A) | 1.2 KB | 3.0 KB | 2.5× |
 | Base CSS | 2.0 KB | 3.6 KB | 1.8× |
 | Namespace / entry | — | 1.9 KB | — |
-| **Total** | **24.9 KB min** | **87.7 KB min** | **3.5×** |
-| | ~8.0 KB gzip | **29.65 KB gzip** | 3.7× |
+| **Total** | **24.9 KB min** | **88.4 KB min** | **3.5×** |
+| | ~8.0 KB gzip | **29.87 KB gzip** | 3.7× |
 
 ## Why Engine is 6.1× — the load-bearing part
 
@@ -76,7 +76,7 @@ all of which §5.2 and §7.3 require.
 ## What was already removed
 
 These were genuine waste, and they are gone. Together they account for
-**4.3 KB gzipped** — the difference between 33.9 KB and today's 29.65 KB:
+**4.3 KB gzipped** — the difference between 33.9 KB and today's 29.87 KB:
 
 | Change | Saved (core, gzip) |
 |---|---:|
@@ -115,7 +115,7 @@ the specification it was costing.
 | | Current (§20.1) | Proposed | Measured today |
 |---|---:|---:|---:|
 | Core | ≤ 8.5 KB gzip | **≤ 30 KB gzip** | 29.87 KB |
-| Full | ≤ 32 KB gzip | **≤ 68 KB gzip** | 67.47 KB |
+| Full | ≤ 32 KB gzip | **≤ 71 KB gzip** | 70.15 KB |
 
 ### The full preset since
 
@@ -126,6 +126,7 @@ touches core:
 | Subsystem | Cost (full, minified) |
 |---:|---:|
 | Gestures + the pointer queue (§13.3, §13.2) | 8.36 KB |
+| The display catalog (§11.4) | 8.30 KB |
 | The collection traits (§9) | 6.01 KB |
 | Motion (§17) | 3.96 KB |
 | Stores (§15.3) | 2.83 KB |
