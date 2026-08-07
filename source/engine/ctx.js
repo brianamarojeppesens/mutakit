@@ -103,7 +103,7 @@ export function makeContext(node) {
         });
         return () => {};
       }
-      return node.own(gestures.attach(node, name, handlers));
+      return node.own(gestures.attachTo(node, name, handlers));
     },
 
     /** Create a DOM element, tracked for automatic teardown. */

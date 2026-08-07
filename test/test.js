@@ -1712,6 +1712,141 @@ describe("motion (§17)", () => {
 });
 
 
+describe("gestures and the pointer queue (§13.2, §13.3)", () => {
+  test("one delegated listener set per root, not one per element", (t) => {
+    const { mk, app } = fixture(t);
+    const before = { ...counters };
+    mk.service("pointer");
+    const added = counters.listeners - before.listeners;
+    for (let i = 0; i < 50; i++) app.create("pane", { size: { w: 10, h: 10 } });
+    mk.tick();
+    t.equal(counters.listeners - before.listeners, added,
+      `50 elements added no listeners; the root has ${added}`);
+    t.ok(added <= 8, "and the root's own set is small");
+  });
+
+  test("a claim cancels the others, except those declared simultaneous", (t) => {
+    const { mk, app } = fixture(t);
+    const gestures = mk.service("gestures");
+    const pane = app.create("pane", { id: "g1", size: { w: 200, h: 200 } });
+    mk.tick();
+
+    const seen = [];
+    const record = (name) => ({
+      began: () => seen.push(name + ":began"),
+      cancelled: (event) => seen.push(name + ":cancelled:" + (event.reason || ""))
+    });
+    t.cleanup(gestures.attachTo(pane.node, "drag", record("drag")));
+    t.cleanup(gestures.attachTo(pane.node, "long-press", record("press")));
+
+    // A drag that begins claims the pointer; the long-press is cancelled.
+    gestures.dispatch(pane.node, { type: "down", x: 0, y: 0, time: 0, id: 1 });
+    gestures.dispatch(pane.node, { type: "move", x: 40, y: 0, time: 20, id: 1 });
+    t.ok(seen.includes("drag:began"));
+    t.equal(seen.filter((s) => s.startsWith("press:")).length, 0,
+      "a long-press that never began is simply out of the running");
+
+    // Both pinch and rotate declare each other, so neither cancels the other.
+    const two = [];
+    t.cleanup(gestures.attachTo(pane.node, "pinch", { began: () => two.push("pinch"), cancelled: () => two.push("pinch:x") }));
+    t.cleanup(gestures.attachTo(pane.node, "rotate", { began: () => two.push("rotate"), cancelled: () => two.push("rotate:x") }));
+    gestures.dispatch(pane.node, { type: "down", x: 0, y: 0, time: 0, id: 7 });
+    gestures.dispatch(pane.node, { type: "down", x: 100, y: 0, time: 0, id: 8 });
+    t.ok(two.includes("pinch") && two.includes("rotate"), "both began");
+    t.equal(two.filter((s) => s.endsWith(":x")).length, 0, "and neither was cancelled");
+  });
+
+  test("requireFailure makes one recognizer wait for another", (t) => {
+    const { mk, app } = fixture(t);
+    const gestures = mk.service("gestures");
+    const pane = app.create("pane", { id: "g2", size: { w: 200, h: 200 } });
+    mk.tick();
+
+    const fired = [];
+    t.cleanup(gestures.attachTo(pane.node, "double-tap", { ended: () => fired.push("double") }));
+    t.cleanup(
+      gestures.attachTo(pane.node, "tap", {
+        config: { requireFailure: ["double-tap"] },
+        ended: () => fired.push("tap")
+      })
+    );
+
+    // A single tap is held back while the double-tap window is still open.
+    gestures.dispatch(pane.node, { type: "down", x: 10, y: 10, time: 0, id: 1 });
+    gestures.dispatch(pane.node, { type: "up", x: 10, y: 10, time: 60, id: 1 });
+    t.deepEqual(fired, [], "the tap waits rather than firing immediately");
+
+    // The window lapses on the clock, the double-tap fails, and the tap is free.
+    gestures.tick(600);
+    gestures.dispatch(pane.node, { type: "down", x: 10, y: 10, time: 700, id: 1 });
+    gestures.dispatch(pane.node, { type: "up", x: 10, y: 10, time: 760, id: 1 });
+    t.deepEqual(fired, ["tap"], "and fires once the double-tap is out of the way");
+  });
+
+  test("destroying an element cancels its gestures mid-flight (§13.3)", (t) => {
+    const { mk, app } = fixture(t);
+    const gestures = mk.service("gestures");
+    const pane = app.create("pane", { id: "g3", size: { w: 200, h: 200 } });
+    mk.tick();
+
+    const seen = [];
+    gestures.attachTo(pane.node, "drag", {
+      began: () => seen.push("began"),
+      cancelled: (event) => seen.push("cancelled:" + event.reason)
+    });
+    gestures.dispatch(pane.node, { type: "down", x: 0, y: 0, time: 0, id: 1 });
+    gestures.dispatch(pane.node, { type: "move", x: 40, y: 0, time: 20, id: 1 });
+    t.deepEqual(seen, ["began"]);
+
+    pane.destroy();
+    mk.tick();
+    t.deepEqual(seen, ["began", "cancelled:destroyed"],
+      "every cancellation source is treated identically");
+  });
+
+  test("ctx.gesture attaches through the element context and is owned by it", (t) => {
+    const { mk, app } = fixture(t);
+    const seen = [];
+    mk.define({
+      type: "acme:swipeable",
+      a11y: "presentation",
+      /** A pointer gesture, so a keyboard equivalent is declared (P5). */
+      keys: { ArrowLeft: "previous", ArrowRight: "next" },
+      create(ctx) {
+        const el = ctx.dom("div");
+        ctx.gesture("swipe", { ended: (event) => seen.push(event.direction) });
+        return el;
+      }
+    });
+    const card = app.create("acme:swipeable", { id: "card", size: { w: 200, h: 100 } });
+    mk.tick();
+
+    const gestures = mk.service("gestures");
+    t.equal(gestures.attachments.has(card.node), true);
+    gestures.dispatch(card.node, { type: "down", x: 0, y: 0, time: 0, id: 1 });
+    gestures.dispatch(card.node, { type: "up", x: 150, y: 0, time: 100, id: 1 });
+    t.deepEqual(seen, ["right"]);
+
+    card.destroy();
+    mk.tick();
+    t.equal(gestures.attachments.has(card.node), false, "ctx.own released it");
+  });
+
+  test("an unknown gesture is reported and inert, not fatal", (t) => {
+    const { mk, app } = fixture(t);
+    const records = [];
+    Mutakit.diagnostics.sink((record) => records.push(record));
+    t.cleanup(() => Mutakit.diagnostics.sink(null));
+    const gestures = mk.service("gestures");
+    const pane = app.create("pane", { size: { w: 10, h: 10 } });
+    mk.tick();
+    const dispose = gestures.attachTo(pane.node, "acme:nope", {});
+    t.equal(typeof dispose, "function", "it still returns a disposable");
+    t.ok(records.some((r) => r.code === "MK3008"));
+  });
+});
+
+
 function rect(handle) {
   const r = handle.node.computed;
   return [round(r.x), round(r.y), round(r.w), round(r.h)];

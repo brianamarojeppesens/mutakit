@@ -136,6 +136,10 @@ export class MutakitInstance extends Kernel {
     if (this.options.theme) this.applyTheme(this.options.theme, node);
 
     this.roots.push(node);
+    // Delegation is per root, and a root can be mounted after the service
+    // exists — a second root, or one created by a plugin.
+    const pointer = this.services.get("pointer");
+    if (pointer) node.own(pointer.observe(node));
     invalidate(node, "arrange");
     this.scheduler.arm();
     return this.handleFor(node);
@@ -341,6 +345,10 @@ export class MutakitInstance extends Kernel {
     for (const hook of target.definition ? target.definition.hooks.destroy : []) {
       this.guard(target, "destroy", hook, [ctx]);
     }
+
+    const gestures = this.services.get("gestures");
+    // Element destruction is a cancellation source like any other (§13.3).
+    if (gestures) gestures.cancel(target, "destroyed");
 
     this.measurer.unobserve(target);
     target.releaseOwned();

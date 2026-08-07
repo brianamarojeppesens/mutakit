@@ -25,6 +25,27 @@ size budget (§20.1), which is 2.0× over for the full preset and 3.8× for core
 
 ### Added
 
+- **Gestures (§13.3) and the delegated pointer queue (§13.2).** Nine
+  recognizers — `tap`, `double-tap`, `long-press`, `drag`, `swipe`, `pinch`,
+  `rotate`, `wheel`, `scrub` — written as **pure reducers**,
+  `step(state, event) → state`, with no DOM, no timers, and no service in
+  sight. §13.3 asks for them to be table-tested with scripted pointer traces,
+  and a reducer is the shape in which that test is possible at all: 24 of them
+  now run in the DOM-free tier with no timing flakiness.
+  - **Arbitration**: a recognizer claims the pointer when it begins, which
+    cancels the others except those declaring `allowSimultaneous` (`pinch` and
+    `rotate` declare each other). Unclaimed pointers fall through — Mutakit
+    never blanket-calls `preventDefault`.
+  - **`requireFailure`** parks the *emission* rather than skipping the *input*.
+    The first version skipped input, which starves the waiting recognizer's
+    dependency of the events it needs to fail, so it restarts forever and the
+    waiter never fires. Both now see every event; only the outcome waits.
+  - **One delegated listener set per root** (§13.2), drained in the INPUT
+    phase. Asserted: 50 elements add zero listeners, which is what makes S3's
+    element count affordable.
+  - Element destruction is a cancellation source like any other, and is now
+    wired as one.
+
 - **Motion (§17)** — the last unimplemented section of the plan. Seven presets
   (`fade`, `scale`, `slide`, the three edge slides, `collapse`, `spring`,
   `none`), each with the `reduced` variant the conformance check already

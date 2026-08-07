@@ -14,6 +14,8 @@ import { OVERLAY_ELEMENTS } from "../elements/surfaces/overlays.js";
 import { POPOVER_ELEMENTS, tooltipHost } from "../elements/surfaces/popovers.js";
 import { ShortcutService } from "../services/shortcuts.js";
 import { MotionService } from "../services/motion.js";
+import { GestureService } from "../services/gestures.js";
+import { PointerService } from "../services/pointer.js";
 import { NATIVE_CONTROLS } from "../elements/forms/controls.js";
 import { COMPOSITE_CONTROLS } from "../elements/forms/composite.js";
 import { FORM_ELEMENTS } from "../elements/forms/form.js";
@@ -50,6 +52,11 @@ registerService("shortcuts", () => new ShortcutService());
 // Motion is a standard plugin (§4.2), registered as a factory so a page that
 // opens no overlay never instantiates it.
 registerService("motion", () => new MotionService());
+// The pointer queue and the recognizers are one mechanism (§13.2, §13.3): the
+// queue is delegated per root and drained in INPUT, and the recognizers are
+// what it drains into.
+registerService("gestures", () => new GestureService());
+registerService("pointer", () => new PointerService());
 installOverlays(Mutakit);
 
 export { Mutakit };
