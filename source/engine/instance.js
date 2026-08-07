@@ -813,6 +813,11 @@ export class MutakitInstance extends Kernel {
     }
 
     const ctx = makeContext(target);
+    // A trait may ship styles, injected once per instance like an element
+    // type's (§12.2). Without this a trait that sets a state flag has no way
+    // to say what that flag should look like.
+    if (trait.styles) this.styles.add(trait.styles, "mutakit.element", `trait:${name}`);
+
     const record = { trait, api: {}, options: options || null };
     target.traits.set(name, record);
 

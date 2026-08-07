@@ -184,10 +184,13 @@ export function conformanceTrait(trait) {
       finding("error", "MK6001", `trait '${trait.name}' handles pointers but declares no \`keys\`; ${POINTER_TRAIT_HINT}.`)
     );
   }
-  // `ctx.own()` *is* the answer to cleanup, so a trait that uses it needs no
-  // `detach`. Warning anyway would train authors to add empty ones, which is
-  // strictly worse than the thing the check exists to prevent.
-  if (!trait.detach && trait.attach && !/ctx\.own\s*\(/.test(sourceOf(trait))) {
+  // Two ways to be fine: register cleanup with `ctx.own()`, or create nothing
+  // that needs any. Warning about a trait that only *reads* would train authors
+  // to add empty `detach` hooks, which is strictly worse than the leak the
+  // check exists to prevent.
+  const traitBody = sourceOf(trait);
+  const creates = /ctx\.dom\s*\(|listen\s*\(|setInterval\s*\(|setTimeout\s*\(|observe[A-Z]/.test(traitBody);
+  if (!trait.detach && trait.attach && creates && !/ctx\.own\s*\(/.test(traitBody)) {
     findings.push(
       finding(
         "warn",

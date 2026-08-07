@@ -72,9 +72,14 @@ docs, and devtools from one declaration, so these pages cannot drift (§24).
 - `draggable`
 - `focus-trap`
 - `focusable`
+- `persistable`
 - `positioned`
 - `resizable`
+- `scrollable`
+- `selectable`
+- `sortable`
 - `tooltip-host`
+- `virtualized`
 
 ## Diagnostics
 

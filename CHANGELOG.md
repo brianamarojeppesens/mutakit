@@ -25,6 +25,20 @@ size budget (§20.1), which is 2.0× over for the full preset and 3.8× for core
 
 ### Added
 
+- **The collection traits (§9)** — `scrollable`, `selectable`, `sortable`,
+  `virtualized`, and `persistable`, completing the trait catalog at thirteen.
+  Each carries the keyboard equivalent P5 requires: `sortable` reorders with
+  `Mod`+arrows, and `selectable`'s range and toggle modifiers work from the
+  keyboard as well as the pointer.
+  - `sortable` reorders **within the flow**, leaving the parent algorithm in
+    charge of every box — which is exactly the fix MK2011 names when someone
+    attaches `draggable` to a flow child instead.
+  - `selectable` keeps the anchor still on a range extend, so a second
+    shift-click re-extends from the original point rather than from the last.
+  - Traits may now ship styles, injected once per instance like an element
+    type's. Without that a trait that sets a state flag had no way to say what
+    the flag should look like.
+
 - **Stores (§15.3)** — an observable store with structural sharing, path
   subscriptions, and time travel in development, shipped with the preset that
   persists a layout. `select()` returns a *signal*, so a store slice goes

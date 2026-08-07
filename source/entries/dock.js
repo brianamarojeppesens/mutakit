@@ -9,6 +9,7 @@ import { Mutakit } from "./core.js";
 import { splitLayout } from "../layout/split.js";
 import { EXTRA_LAYOUTS } from "../layout/algorithms.js";
 import { draggable, collapsible, resizable } from "../traits/draggable.js";
+import { COLLECTION_TRAITS } from "../traits/collections.js";
 import { resizer } from "../elements/structural/resizer.js";
 import { split } from "../elements/structural/split.js";
 import { STRUCTURAL_EXTRAS } from "../elements/structural/tabs.js";
@@ -21,6 +22,7 @@ export function installSplits(mk) {
   mk.trait(draggable, { replace: true });
   mk.trait(collapsible, { replace: true });
   mk.trait(resizable, { replace: true });
+  for (const trait of COLLECTION_TRAITS) mk.trait(trait, { replace: true });
   mk.define(resizer, { replace: true });
   mk.define(split, { replace: true });
   for (const definition of STRUCTURAL_EXTRAS) mk.define(definition, { replace: true });

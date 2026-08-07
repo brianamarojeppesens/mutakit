@@ -1847,6 +1847,148 @@ describe("gestures and the pointer queue (§13.2, §13.3)", () => {
 });
 
 
+describe("collection traits (§9)", () => {
+  function list(t, options) {
+    const { mk, app } = fixture(t);
+    const holder = app.create("stack", { id: "list", axis: "y", left: 0, top: 0, width: 300, height: 400 });
+    const items = ["a", "b", "c", "d"].map((id) =>
+      holder.create("pane", { id, content: id, layout: { size: 40 } })
+    );
+    mk.tick();
+    const api = holder.trait(options.trait, options.config || {});
+    return { mk, app, holder, items, api };
+  }
+
+  test("selectable: replace, toggle, and range are three different gestures", (t) => {
+    const { mk, api, items } = list(t, { trait: "selectable", config: { mode: "multiple" } });
+    const changes = [];
+    mk.handleFor(items[0].node.parent).on("selectionchange", (e) => changes.push(e.detail.selected.length));
+
+    api.select("a");
+    t.deepEqual(api.selected, ["a"], "a bare select replaces");
+
+    api.select("c", { additive: true });
+    t.deepEqual(api.selected.sort(), ["a", "c"], "the platform modifier toggles one in");
+
+    api.select("d", { range: true });
+    t.deepEqual(api.selected.sort(), ["c", "d"], "shift extends from the anchor, which was c");
+
+    api.select("a", { range: true });
+    t.deepEqual(api.selected.sort(), ["a", "b", "c"],
+      "and the anchor did not move, so a second extend starts from c again");
+
+    mk.tick();
+    t.equal(items[0].el.getAttribute("aria-selected"), "true");
+    t.equal(items[3].el.getAttribute("aria-selected"), "false");
+  });
+
+  test("selectable: single mode never accumulates", (t) => {
+    const { api } = list(t, { trait: "selectable", config: { mode: "single" } });
+    api.select("a");
+    api.select("b", { additive: true });
+    t.deepEqual(api.selected, ["b"]);
+  });
+
+  test("selectable: the keyboard path does what the pointer path does (P5)", (t) => {
+    const { mk, holder, api } = list(t, { trait: "selectable", config: { mode: "multiple" } });
+    api.select("b");
+    key(holder.el, "ArrowDown");
+    t.deepEqual(api.selected, ["c"]);
+    key(holder.el, "ArrowDown", { shiftKey: true });
+    t.deepEqual(api.selected.sort(), ["c", "d"], "shift extends, from the keyboard too");
+    key(holder.el, "a", { ctrlKey: true });
+    t.equal(api.selected.length, 4);
+    key(holder.el, "Escape");
+    t.deepEqual(api.selected, []);
+  });
+
+  test("sortable reorders within the flow, so the parent still owns every box", (t) => {
+    const { mk, holder, api, items } = list(t, { trait: "sortable" });
+    const before = items.map((h) => h.node.computed.y);
+    t.deepEqual(api.order, ["a", "b", "c", "d"]);
+
+    api.move(0, 2);
+    mk.tick();
+    t.deepEqual(api.order, ["b", "c", "a", "d"]);
+    // The tracks are unchanged; only the order is. Nothing declared
+    // `positioning: 'self'`, which is what MK2011 would have caught.
+    t.deepEqual(holder.node.children.map((c) => c.computed.y), before);
+    t.equal(items[0].node.positioning, "parent");
+  });
+
+  test("sortable: Mod+arrows reorder from the keyboard", (t) => {
+    const { mk, holder, api, items } = list(t, { trait: "sortable" });
+    items[2].el.tabIndex = 0;
+    items[2].el.focus();
+    key(holder.el, "ArrowUp", { ctrlKey: true });
+    mk.tick();
+    t.deepEqual(api.order, ["a", "c", "b", "d"], "reordering is not pointer-only");
+  });
+
+  test("scrollable contains overscroll and treats offset as state, not geometry", (t) => {
+    const { mk, holder, api } = list(t, { trait: "scrollable" });
+    // Four 40px rows in a 100px box, so there is something to scroll. A box
+    // taller than its content clamps scrollTop to 0, which would make the
+    // assertion below pass or fail for the wrong reason.
+    holder.constrain({ height: 100 });
+    mk.tick();
+    t.equal(holder.el.style.overscrollBehavior, "contain");
+    t.equal(holder.el.getAttribute("tabindex"), "0", "and it is reachable by keyboard");
+
+    holder.el.scrollTop = 40;
+    holder.el.dispatchEvent(new Event("scroll"));
+    t.equal(api.offset.y, 40);
+    t.deepEqual(holder.node.state.scrollOffset, { x: 0, y: 40 });
+    // Scroll sets PAINT, never ARRANGE (§5.11 rule 5).
+    t.equal((holder.node.flags & 4) !== 0, false, "no ARRANGE was requested");
+  });
+
+  test("virtualized computes its window in READ, from the scroll offset", (t) => {
+    const { mk, holder } = list(t, { trait: "scrollable" });
+    const api = holder.trait("virtualized", { rowHeight: 20, overscan: 2, total: 1000 });
+    const ranges = [];
+    holder.on("rangechange", (event) => ranges.push(event.detail));
+    mk.tick();
+
+    t.ok(ranges.length, "a window was computed");
+    t.equal(ranges[0].start, 0);
+    t.ok(ranges[0].end < 1000, "and it is a window, not the whole list");
+
+    holder.el.scrollTop = 400;
+    mk.tick();
+    const latest = ranges[ranges.length - 1];
+    t.equal(latest.start, 18, "400/20 = 20, minus 2 of overscan");
+    t.equal(holder.el.querySelector(".mk-virtual-spacer").style.height, "20000px",
+      "and the scrollbar is honest about the full height");
+  });
+
+  test("persistable is opt-in, and says so when it cannot be keyed", (t) => {
+    const { mk, app } = fixture(t);
+    const records = [];
+    Mutakit.diagnostics.sink((record) => records.push(record));
+    t.cleanup(() => Mutakit.diagnostics.sink(null));
+
+    const keyed = app.create("pane", { id: "keyed", size: { w: 10, h: 10 } });
+    const api = keyed.trait("persistable", { keys: ["hidden"] });
+    t.deepEqual(api.keys, ["hidden"]);
+    t.deepEqual(api.snapshot(), { hidden: false });
+
+    const anonymous = app.create("pane", { size: { w: 10, h: 10 } });
+    anonymous.trait("persistable", { keys: ["hidden"] });
+    t.ok(records.some((r) => r.code === "MK4005"), "an unkeyed element can only restore by position");
+  });
+
+  test("a trait may ship its own styles, injected once", (t) => {
+    const { mk, holder } = list(t, { trait: "selectable" });
+    mk.tick();
+    t.equal(mk.styles.injected.has("trait:selectable"), true);
+    const second = holder.create("pane", { id: "extra" });
+    mk.attachTrait(second.node, "selectable", {});
+    t.equal(mk.styles.injected.has("trait:selectable"), true, "and only once");
+  });
+});
+
+
 function rect(handle) {
   const r = handle.node.computed;
   return [round(r.x), round(r.y), round(r.w), round(r.h)];
