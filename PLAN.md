@@ -1,6 +1,6 @@
 # Mutakit — Project Plan
 
-> **Status:** Draft 6 · 2026-08-06
+> **Status:** Draft 7 · 2026-08-06
 > **Scope:** Full architectural outline for Mutakit as a JavaScript + CSS GUI construction library.
 > **Audience:** The maintainer(s) building it. This document is the design source of truth;
 > `source/` is the implementation source of truth.
@@ -8,6 +8,21 @@
 <details>
 <summary><strong>Revision log</strong></summary>
 
+- **Draft 7** — **The toolchain constraint lifted.** Node is on PATH and dependencies are
+  permitted, so §2.1's four constraints were rewritten and everything resting on them
+  followed. **D5 resolved: yes**, on capability rather than size — §20.4's finding that the
+  gzipped penalty was only ~1 KB held, so size would have been the wrong reason to adopt Node
+  and the plan was right to refuse it. **D14 resolved: yes**, ungated. §22.2 drops the
+  IIFE-registry module system for plain ESM, which the registry was explicitly designed to
+  make cheap — and was. §22.3 replaces `build.py` with esbuild, retiring the hand-written
+  minifier and `tools/test_build.py` with it; §23.3 replaces the hand-written CDP driver with
+  Playwright. The single most valuable consequence is not size: it is that **R1's outstanding
+  exit gate becomes a CI job**, since Firefox and Safari are now one config line each rather
+  than two protocol implementations (§26 M0 sequences this first). New: source maps, real
+  tree-shaking, `tsc`-verified types. §2.1 now states a **two-budget rule** — build-time
+  dependencies are free, runtime dependencies stay zero by default — because §1.1, §1.4, D13
+  and §20.1 all rest on the shipped artifact having none. R3 retires; **R3′** replaces it,
+  covering supply chain and dependency drift.
 - **Draft 6** — Cleared the three highest-value open items. **D1 resolved on evidence**
   (§22.6): a 31-case probe of `build.py`'s minifier confirmed ES2020 support and found a real
   nested-template bug that silently deleted code from the minified build — fixed in
@@ -82,6 +97,12 @@ Conventions in this document:
 Mutakit is a dependency-free browser library that builds and mutates graphical user
 interfaces from declarative geometry — you describe *what element* and *where*, and the
 library resolves layout, interaction, accessibility, and styling.
+
+> **"Dependency-free" means what ships, not what builds it.** Nothing Mutakit sends to a
+> user's page depends on anything else — that is the promise behind §1.4's single
+> `<script>` tag, D13's decision to reimplement anchored positioning, and §20.1's budget.
+> The *toolchain* uses ordinary Node dependencies (§2.1, §22.3). Every "no dependencies"
+> claim in this document is a claim about the shipped artifact.
 
 ### 1.2 The premise
 
@@ -193,43 +214,67 @@ mutakit/
 ├── README.md          44 lines — scaffold docs, describes hello() placeholder
 ├── CHANGELOG.md       14 lines — Keep-a-Changelog format, v0.2.0 stub
 ├── unpinned.json      28 lines — manifest: name, version, source/build/test paths
-├── build.py          251 lines — concatenates manifest-listed sources, adds banner,
+├── build.py          311 lines — concatenates manifest-listed sources, adds banner,
 │                                 writes expanded + conservatively minified output
+│                                 ⚠ retired in draft 7; replaced by esbuild (§22.3)
 ├── source/
 │   └── mutakit.js     74 lines — UMD wrapper, ES5, `create()`/`hello()` placeholder
 ├── build/            generated; gitignored except .gitkeep
+├── tools/
+│   └── test_build.py  98 lines — 31-case minifier probe (§22.6)
+│                                 ⚠ retired with the minifier it defends
 └── test/
     ├── index.html     39 lines — loads source directly; sandbox + results panels
     ├── harness.js    123 lines — ~50-line assertion lib: ok/equal/deepEqual/throws
     ├── harness.css   127 lines — dark/light themed harness styling
-    └── test.js        36 lines — four starter tests against the placeholder API
+    ├── test.js        36 lines — four starter tests against the placeholder API
+    └── proto/
+        └── split-grid.html  316 lines — R1 prototype (§27.2); run in Chrome, still
+                                          needs Firefox and Safari
 ```
 
 ### 2.1 What this constrains
 
-- **No Node, no npm.** `node` is not on PATH. The toolchain is Python 3 + a browser. Any
-  plan that assumes `npm install` is a plan for a different project.
-- **The build is concatenation, not bundling.** `build.py` joins the files listed in
-  `unpinned.json:source.files` in order. There is no module resolution, no tree-shaking, no
-  import rewriting. Module structure must be expressible as *ordered concatenation*
-  (§22).
-- **The minifier is line-preserving.** It strips comments and collapses intra-line
-  whitespace but never joins lines, so ASI can't change behaviour. It correctly tracks
-  strings, template literals, and regex literals. It does **not** rename identifiers, so
-  minified size will be larger than a real minifier's — budget accordingly (§20.4), and
-  keep the escape hatch in `build.py`'s docstring (swap `minify()` for esbuild/terser) in
-  mind for 1.0.
-- **The test harness is synchronous and DOM-based.** It runs every registered test on
-  `DOMContentLoaded` and renders results to a list. It has no async support, no setup and
-  teardown, and no DOM-specific assertions. A GUI library needs all three (§23).
+> **Revised in draft 7.** Drafts 1–6 were written against a Python-only toolchain with no
+> `node` on PATH. Node is now available and third-party dependencies are permitted. The four
+> bullets below replace that constraint set; §22 and §23 are rewritten to match. The single
+> most important thing this section now says is the distinction in the first bullet — it is
+> what keeps the product promise intact while the toolchain changes underneath it.
+
+- **Two dependency budgets, not one.** *Build-time* dependencies are permitted and
+  unconstrained in kind: Node is on PATH, `npm install` is a legitimate instruction, and the
+  toolchain may take whatever it needs. *Runtime* dependencies — anything that reaches a
+  user's page — remain **zero by default**, because §1.1's dependency-free claim, §1.4's
+  single-`<script>`-tag promise, and §20.1's size budget all rest on it. Adding one requires a
+  decision record and must fit the budget; the presumption is against. This distinction is
+  load-bearing throughout the document: "dependency-free" describes the *shipped artifact*,
+  never the workshop that produces it.
+- **The build may bundle.** Concatenation was a constraint, not a preference. With a real
+  bundler there is module resolution, tree-shaking, and import rewriting, so module structure
+  no longer has to survive being concatenated in arbitrary order (§22.2 is rewritten from an
+  IIFE registry to plain ESM). Tree-shaking in particular serves the size goal directly:
+  unreferenced code stops shipping, which no amount of careful concatenation achieves.
+- **Minification is delegated, not hand-rolled.** `build.py`'s line-preserving minifier —
+  which does not rename identifiers and cost a real nested-template bug to get correct
+  (§22.6) — is replaced by esbuild. Identifier mangling closes the ~30–40% gap §20.4 was
+  written to excuse, and an entire category of hand-written-tokenizer bug disappears with the
+  tokenizer. This is the clearest win available and the least controversial.
+- **The test harness stays browser-first, but headless testing gets easy.** The in-browser
+  harness remains the primary way tests run, because a GUI library's tests belong in a real
+  browser and the harness is genuinely good at that (§23.1). What changes is the driver: a
+  hand-written Python CDP client (§23.3) becomes Playwright, which also unlocks the
+  cross-engine runs the R1 gate needs — Firefox and Safari are one line of config each rather
+  than two more protocol implementations.
 
 ### 2.2 What survives
 
-Keep: the UMD wrapper shape, the `create(options)` factory pattern, the manifest-driven
-build, the zero-dependency harness concept, Keep-a-Changelog + SemVer.
+Keep: the UMD *output shape* (now emitted by the bundler rather than hand-written), the
+`create(options)` factory pattern, the zero-**runtime**-dependency harness concept,
+Keep-a-Changelog + SemVer.
 
 Replace: `hello()`, the ES5-only style (⚑ D1), the single-file source layout, the four
-starter tests.
+starter tests, and — new in draft 7 — the manifest-driven concatenating build and its
+hand-written minifier, superseded by ESM entry points and esbuild (§22.3).
 
 ---
 
@@ -338,6 +383,14 @@ every other element type, every trait, gestures, motion, persistence, devtools.
 **Presets**: named bundles for convenience — `mutakit.core.js`, `mutakit.app.js`
 (core + overlays + forms), `mutakit.dock.js` (core + split/dock + persistence),
 `mutakit.hud.js` (core + anchor + gamepad input), `mutakit.js` (everything).
+
+*Draft 7 narrows who these are for.* Each preset is now an entry file in `source/entries/`
+whose imports are its definition (§22.1). They remain essential for the `<script>`-tag
+audience, who cannot tree-shake and must choose a pre-cut bundle. For anyone consuming the
+ESM build through their own bundler, presets become merely a convenient starting import —
+their real bundle is determined by what they actually reference, so a user who imports one
+element from `mutakit.js` no longer pays for the rest. That removes the main hazard of
+offering an "everything" preset.
 
 ---
 
@@ -1757,7 +1810,8 @@ effects scheduled into the STATE phase of the frame loop. `untrack`, `batch`, an
 `dispose` are provided. Effects created inside an element's lifecycle are owned by
 `ctx.own` and disposed automatically.
 
-**Why build this rather than depend on one:** zero dependencies is a project constraint,
+**Why build this rather than depend on one:** zero *runtime* dependencies is a project
+constraint that draft 7 explicitly preserved (§2.1),
 and the scheduler must integrate with the frame loop (§6.3), which no off-the-shelf signal
 library does. It stays under 200 lines.
 
@@ -2116,20 +2170,24 @@ A benchmark page in `test/bench/` with scripted scenarios (cold init, split drag
 animation, modal open/close, 1000-row list scroll). Results recorded per release in
 `docs/perf-history.md`. A regression >10% blocks a release.
 
-### 20.4 The minifier caveat
+### 20.4 The minifier caveat *(closed in draft 7)*
 
-`build.py`'s minifier does not rename identifiers, so its output is perhaps 30–40% larger
-than terser's. The budgets in §20.1 are stated against a **real** minifier, since that is
-what users will experience via a CDN or their own bundler. Track both numbers; if the gap
-becomes the binding constraint before 1.0, take the escape hatch documented in `build.py`
-and shell out to esbuild (⚑ D5).
+**This caveat no longer applies.** It existed because `build.py`'s minifier did not rename
+identifiers, making its output perhaps 30–40% larger than terser's, and §20.1's budgets were
+therefore stated against a hypothetical "real" minifier the project could not run. esbuild
+(§22.3) now *is* the minifier, so the budgets are measured against the tool that actually
+produces the shipped artifact and the two numbers stop diverging.
 
-Crucially, this gap **mostly disappears under gzip**: unmangled identifiers are highly
-repetitive and compress well. The accounting in §20.5 estimates ~26 KB minified via terser
-versus ~34 KB via `build.py`, but only ~8.4 KB versus ~9.5 KB gzipped. That ~1 KB delta is
-the real cost of the no-Node constraint, and it is small enough that D5 should not be
-decided on size grounds — which is itself a useful finding, since draft 1 implied it might
-be.
+Worth preserving from the original analysis, because it is a useful piece of calibration: the
+gap **mostly disappeared under gzip** anyway. Unmangled identifiers are highly repetitive and
+compress well — ~26 KB minified via terser versus ~34 KB via `build.py`, but only ~8.4 KB
+versus ~9.5 KB gzipped. So the ~1 KB gzipped delta was the true cost of the no-Node
+constraint, and D5 was correctly decided on *capability* grounds (types, headless CI,
+tree-shaking, source maps) rather than on size. Draft 1 had implied size would be the deciding
+factor; it would have been the wrong reason to reach the right answer.
+
+The real size win from draft 7 is not mangling at all — it is **tree-shaking** (§22.2), which
+removes code rather than shortening it, and which the old build could not do at any setting.
 
 ### 20.5 Core size accounting
 
@@ -2147,8 +2205,8 @@ of each module.
 | Services & traits | layers, focusable | 1.4 |
 | Elements | pane, surface, stack, group, spacer | 1.2 |
 | Base CSS (as JS strings) | reset, tokens, base | 2.0 |
-| Module wrapper + names (§22.2) | — | 0.7 |
-| **Total** | | **~25.6 KB min · ~8.2 KB gzip** |
+| ~~Module wrapper + names (§22.2)~~ | *removed in draft 7 — ESM has no per-file wrapper and no unmanglable name strings* | ~~0.7~~ |
+| **Total** | | **~24.9 KB min · ~8.0 KB gzip** |
 
 **Findings.**
 
@@ -2169,9 +2227,19 @@ of each module.
    min / ~31 KB gzip. Revised from 90 KB, and the reason to keep presets (§4.2) meaningful
    rather than decorative: almost nobody needs all of it.
 
-This table is regenerated from `build/manifest.json` (§22.3.6) at each release and diffed
+6. *(Draft 7.)* The estimates above were always stated as "terser-class", so adopting a real
+   minifier does not move them — it means they can finally be **verified rather than
+   estimated**, from esbuild's metafile. Two figures change: the §22.2 module wrapper and its
+   ~600 bytes of unmanglable name strings are gone, and tree-shaking means a preset's cost is
+   now determined by what it imports rather than by what its file list contains. Expect the
+   measured numbers to come in at or under these estimates; if any module comes in *over*,
+   that is a finding worth a line in the changelog rather than a quiet budget revision.
+
+This table is regenerated from `build/manifest.json` (§22.3) at each release and diffed
 against the previous one, so drift is visible per module rather than as one number that
-mysteriously grew.
+mysteriously grew. From draft 7 the manifest is esbuild's metafile, so the table reports
+shipped bytes after tree-shaking rather than the sum of a declared file list — the first time
+this number is a measurement rather than a projection.
 
 ---
 
@@ -2227,6 +2295,18 @@ fails at first use, halfway through building a UI.
 including the DSL plugin (§18.3), which compiles to data structures rather than to code.
 Style injection prefers constructable stylesheets, which need no nonce; the `<style>`
 fallback accepts a `nonce` option.
+
+**The build is now part of the attack surface** *(new in draft 7)*. Adopting Node tooling
+means a compromised build-time dependency can alter the bytes users receive, which was
+structurally impossible when the build was one Python file with no dependencies. This is the
+security cost of D5 and it should be stated rather than absorbed silently. Mitigations are in
+§27.2 R3′ — a deliberately tiny build-critical set, exact pins, a committed lockfile,
+`npm ci --ignore-scripts` in CI — plus the two consumer-facing checks that already existed:
+**SRI hashes** for CDN users (§25.5) and `--provenance` on npm publishes, both of which let
+someone verify what they received rather than trusting the pipeline that produced it. Note
+the runtime guarantee is unchanged: zero runtime dependencies means an attacker who
+compromises a build-time package still cannot reach users through a *transitive runtime*
+package, because there are none.
 
 **Plugins are not sandboxed, and the docs say so.** `use()` runs arbitrary code with full
 page privileges. `ctx` (§8.2) is an *architectural* boundary that keeps plugins on public
@@ -2289,91 +2369,144 @@ source/
     reset.css  tokens.css  base.css        (compiled into JS string constants)
   types/
     manual.d.ts           hand-written types the schemas can't express (§22.5)
-  _epilogue.js            resolve the graph, assemble the public API, export
+  entries/
+    core.js  app.js  dock.js  hud.js  full.js    bundler entry points, one per §4.2 preset
 
 tools/
-  lint_arch.py            architectural lint (§22.4)
-  gen_types.py            .d.ts generation from prop schemas (§22.5)
-  gen_docs.py             API docs from prop schemas (§24)
-  run_tests.py            headless CDP test driver (§23.3)
+  lint-arch.mjs           architectural lint (§22.4)
+  gen-types.mjs           .d.ts generation from prop schemas (§22.5)
+  gen-docs.mjs            API docs from prop schemas (§24)
+
+build.mjs                 esbuild driver (§22.3)
+package.json              scripts, exports map, pinned devDependencies
+package-lock.json         committed; CI installs with `npm ci --ignore-scripts`
+playwright.config.mjs     headless runs across the §25.3 baseline engines (§23.3)
+tsconfig.json             `tsc --noEmit` over examples/ (§22.5)
 ```
 
-### 22.2 Concatenation-friendly modules
+*Draft 7 changes to this tree:* `_epilogue.js` is gone — there is no graph to resolve at
+runtime — and is replaced by `entries/`, where each preset is an entry point whose imports
+*are* its file list. The Python tools become Node ones; `run_tests.py` disappears into
+Playwright's config. `unpinned.json` keeps its project-manifest role but loses the ordered
+`source.files` array, which the import graph now supersedes.
 
-With no bundler (§2.1), module structure has to survive being *concatenated in arbitrary
-order*. Every source file is a self-contained IIFE that pushes a lazy factory onto a
-temporary global:
+### 22.2 Modules — plain ESM *(rewritten in draft 7)*
+
+Source is ESM. Every file uses ordinary `import`/`export`, the bundler resolves the graph,
+and nothing about the module system is bespoke:
 
 ```js
 // source/geometry/len.js
-(function () {
-  "use strict";
-  (self.__MK_MODULES__ = self.__MK_MODULES__ || []).push({
-    name: "geometry/len",
-    deps: ["core/diagnostics"],
-    factory: function (diag) {
-      …
-      return { parse: parse, toCSS: toCSS, toNumber: toNumber };
-    }
-  });
-})();
+import { warn } from "../core/diagnostics.js";
+
+export function parse(input) { … }
+export function toCSS(len) { … }
+export function toNumber(len, ctx) { … }
 ```
 
-`_epilogue.js` is likewise a complete file: it drains the queue, topologically sorts by
-`deps`, invokes each factory exactly once, assembles the public namespace, applies the UMD
-export, and deletes the temporary global.
+**What this replaces.** Drafts 1–6 specified a registry: every file an IIFE pushing a
+`{name, deps, factory}` record onto a temporary global, drained and topologically sorted by
+an `_epilogue.js`. That design was a good answer to "modules must survive arbitrary-order
+concatenation" — it is not a good answer to anything else, and with a bundler the question
+is gone. Its own stated costs disappear with it: no ~600 bytes of unmanglable module-name
+strings, no per-file function wrapper, no hand-written topological sort to maintain, and no
+temporary global to reason about against P8.
 
-The properties that matter:
+The properties the old design worked to preserve are now free:
 
-- **Every file is independently valid JavaScript.** Draft 1 split a UMD wrapper across a
-  `_prologue.js`/`_epilogue.js` pair, which left both files syntactically incomplete —
-  editors, linters, and `node --check` would all have flagged them, and a developer could
-  not load one file in isolation to debug it. This design has no prologue at all.
-- **Bundle order is irrelevant**, except that `_epilogue.js` must be last. Factories are
-  lazy, so a module may be concatenated before its dependencies. That removes an entire
-  category of merge conflict from `unpinned.json`.
-- **Cycles are a build-time error** from `tools/lint_arch.py` (§22.4), not a runtime
-  surprise at a user's first page load.
-- **The temporary global is transient** and deleted by the epilogue, so it does not violate
-  P8; two Mutakit bundles on one page cannot interleave, since scripts execute serially.
+- **Every file is independently valid JavaScript** — true of ESM by definition, and now
+  checkable by every editor, linter, and type checker without special configuration.
+- **Order is irrelevant** — the bundler computes it from the import graph. `unpinned.json`
+  no longer carries an ordered file list, which removes that merge-conflict surface
+  entirely rather than merely making it tolerable.
+- **Cycles are a build-time error**, still, but from the bundler itself as well as from the
+  §22.4 lint. Two independent detectors, neither hand-written.
 
-**Costs, stated honestly:** module names are strings and cannot be mangled by any minifier
-(~30 modules × ~20 characters ≈ 600 bytes), and there is one function wrapper per file. Both
-are acceptable against the §20.1 budget. Should the project ever gain Node, this structure
-maps onto ESM mechanically — `name`/`deps`/`factory` is `import`/`export` with the sugar
-removed (⚑ D5).
+**What this buys beyond parity.** Tree-shaking is the substantive gain: with a static import
+graph, code nobody references stops shipping. That serves the size goal in a way the registry
+could not — a lazy factory that is never invoked still occupies bytes in the bundle, whereas
+an unimported ESM binding is eliminated. It also reduces §4.2's presets from a necessity to a
+convenience for `<script>`-tag users; anyone consuming the ESM build gets a preset tailored to
+their actual imports, for free.
 
-### 22.3 `build.py` changes
+**The one real cost: `file://` stops working.** A concatenated script loads from anywhere; ES
+modules are fetched, so the browser applies CORS and `file://` is denied. Development
+therefore requires a local server — `python3 -m http.server` is enough, and the README
+already documents it as an option. Two things follow. First, §23.3's "open `test/index.html`
+in a browser, as today" becomes "serve the project and open it", and the README must stop
+offering the direct-open path rather than leaving people to hit an opaque CORS error.
+Second, this is not hypothetical: it is exactly what blocked the first attempt to run
+`test/proto/split-grid.html` (§27.2 R1), which had to be served over localhost before it
+would load at all. Cheap, but it must be written down, because the failure mode is a blank
+page with a console error rather than anything self-explanatory.
 
-1. Support directory globs and an explicit `order` array in `unpinned.json`, so adding a
-   file doesn't require editing the manifest.
-2. Strip `/* @dev */ … /* @enddev */` blocks when building the production output (§21.1).
-3. Inline `styles/*.css` into JS string constants (with the same conservative whitespace
-   handling as the JS minifier).
-4. Emit the preset bundles listed in §4.2 from named file lists.
-5. Add `--watch` (poll `source/` mtimes, rebuild on change) for a tolerable dev loop.
-6. Emit a source manifest (file list, sizes, hashes) into `build/manifest.json` for
-   bundle-size tracking.
-7. Keep `--check`.
+The module *graph* is unaffected as a deliverable — it moves from an implicit runtime
+structure to `build/manifest.json` (§22.3), emitted from esbuild's metafile, which is a
+better source of truth because it reports what actually shipped after tree-shaking rather
+than what was declared.
+
+### 22.3 The build *(rewritten in draft 7)*
+
+`build.py` is retired. The build is **esbuild**, driven by a small `build.mjs` and exposed
+through `npm run` scripts. esbuild is the only build-critical dependency; it is a single
+binary, it is fast enough that `--watch` is instant rather than tolerable, and it covers
+bundling, tree-shaking, minification, and source maps in one tool.
+
+What the build must do:
+
+1. **Bundle each §4.2 preset** from its own entry file, in three output formats: IIFE (the
+   `<script>`-tag path, with the UMD shim), ESM (for bundler consumers, so tree-shaking
+   reaches into the library), and minified variants of both.
+2. **Strip `/* @dev */ … /* @enddev */` blocks** from production output (§21.1). esbuild's
+   `drop` and `define` handle most of this; a conditional-export split handles the rest,
+   which is cleaner than the textual stripping `build.py` did.
+3. **Inline `styles/*.css`** as JS string constants, via esbuild's `text` loader — a built-in
+   rather than a hand-written whitespace-safe inliner.
+4. **Emit `build/manifest.json`** from esbuild's metafile: per-module sizes, the resolved
+   import graph, output hashes, and SRI hashes for §25.5. This is what §20.5's accounting
+   table is regenerated from, and unlike the old manifest it reports what actually shipped
+   after tree-shaking rather than what was listed.
+5. **Emit source maps** for the expanded builds. The old build could not meaningfully produce
+   these; with them, a stack trace from a minified bundle is debuggable.
+6. **`--watch` and `--check`**, both preserved in behaviour.
+
+**Source maps deserve their own line.** They were absent from drafts 1–6 not by choice but
+because a concatenating Python script cannot realistically emit them. Their arrival changes
+what §21's diagnostics can promise: an error surfaced from a minified production bundle can
+now point at a real source location, which is worth more to a plugin author than most of the
+devtools surface in §19.3.
+
+**What retires with `build.py`:** the hand-written JS tokenizer and its minifier, and
+`tools/test_build.py`, the 31-case probe that existed to keep that tokenizer honest. Both were
+good work — the probe caught a real bug that silently deleted code from minified output — but
+the class of bug they defended against belongs to esbuild now. Delete them rather than
+maintain them alongside a bundler that makes them redundant; the CHANGELOG records why they
+existed. `tools/lint_arch.py` (§22.4) survives the transition in purpose but moves to Node,
+where it reads a real ES module graph instead of pattern-matching source text.
 
 ### 22.4 Architectural lint
 
-A Python script, `tools/lint_arch.py`, run by the build, enforcing:
+`tools/lint-arch.mjs`, run by the build, enforcing:
 
 - No upward imports between layers (§4.1).
 - No file outside `core/dom.js` references `document` or `window` directly.
 - Every `define()`/`trait()`/`layout()` call in `source/` uses only the public `ctx`
-  surface (P3) — checked by grepping for private-prefixed identifiers.
+  surface (P3).
 - Every element type declares `a11y` or an explicit opt-out (P5).
 - Every diagnostic code used in source exists in `docs/diagnostics.md`.
 
 This is what keeps P3 and P5 true a year from now, when nobody remembers the rules.
 
+*Draft 7:* moved from Python to Node so it can walk a parsed ES module graph. The first two
+rules are import-graph questions that a bundler answers exactly and a text search only
+approximates; the third was specified as "checked by grepping for private-prefixed
+identifiers", which is precisely the kind of check that yields false confidence — a real
+parse replaces it. This is a correctness upgrade, not just a language change.
+
 ### 22.5 TypeScript definitions
 
-Shipping types is table stakes for adoption, and skipping them because the project has no
-Node toolchain would be a bad trade. `build/mutakit.d.ts` is generated by
-`tools/gen_types.py` from the same prop schemas that already drive validation (§8.1),
+Shipping types is table stakes for adoption. `build/mutakit.d.ts` is generated by
+`tools/gen-types.mjs` from the same prop schemas that already drive validation (§8.1),
 devtools (§19.3), and the API docs (§24).
 
 That the schema has *four* consumers is the strongest argument for §8.1's design: a plain
@@ -2384,11 +2517,20 @@ independently.
   is fully typed once `mk.use(AcmeWidgets)` is in scope.
 - The parts a schema cannot express — the fluent handle chain (§18.1), generics on signals
   (§15.1), the `Len` union — are hand-written in `source/types/manual.d.ts` and merged.
-- Verified by `tsc --noEmit` over `examples/`, which is the one place Node tooling would
-  clearly earn its keep. This is a concrete input to D5.
+- Verified by `tsc --noEmit` over `examples/`. Drafts 1–6 called this "the one place Node
+  tooling would clearly earn its keep" and filed it as a concrete input to D5; with D5 now
+  resolved it is simply part of the build, and this section no longer has to argue for
+  itself. It runs in CI and a type regression fails the build.
 
 
-### 22.6 The minifier, verified *(resolves D1)*
+### 22.6 The minifier, verified *(resolves D1; historical as of draft 7)*
+
+> **Superseded, but kept.** Draft 7 replaces this minifier with esbuild (§22.3), so the
+> tooling described below is retired and `tools/test_build.py` is deleted along with it.
+> **D1's resolution stands** — and stands more firmly, since esbuild's ES2020 support needs
+> no probe. The section is retained in full because its *process finding* is the durable
+> part, and because deleting the record of a silent production-only bug would be exactly the
+> wrong lesson to draw from having fixed it.
 
 Drafts 1–4 asserted that `build.py`'s minifier "handles modern syntax correctly" and used
 that to propose an ES2020 baseline. Nobody had checked. `tools/test_build.py` now does, with
@@ -2426,10 +2568,14 @@ This mattered more than it first appears:
 code and may nest arbitrarily, while template text stays protected. Comment stripping, banner
 retention (`/*! … */`), and idempotence are all still verified.
 
-**Process finding.** The bug predates the plan and would not have been found by reviewing the
-plan, only by running the code the plan depends on. Where a document asserts that existing
-tooling supports a decision, the cheap move is to test the tooling — §26's M0 therefore gains
-`tools/test_build.py` to the release checklist (§25.4).
+**Process finding — the part that outlives the tooling.** The bug predates the plan and would
+not have been found by reviewing the plan, only by running the code the plan depends on. Where
+a document asserts that existing tooling supports a decision, the cheap move is to test the
+tooling. That finding has now repeated twice: §27.2 R1's prototype had gone unrun for a whole
+draft while the plan reasoned confidently about what it would show, and running it corrected a
+row of the analysis. Draft 7's move to esbuild retires this particular minifier but not the
+lesson — **the release checklist (§25.4) keeps a "run the thing, don't cite it" item**, now
+pointed at the build and the R1 prototype rather than at `tools/test_build.py`.
 
 ---
 
@@ -2442,8 +2588,17 @@ The existing 123-line harness needs, in order: async tests (return a promise),
 deterministic fake clock and fake rAF, and a machine-readable result dump on
 `window.harness.results` for external drivers.
 
-Deliberately still no build step and no dependencies. It grows to maybe 400 lines and stays
-readable.
+**Draft 7 keeps this harness rather than adopting Vitest or similar**, which deserves a
+justification now that the option exists. The tests that matter most here are layout snapshots
+and synthetic interaction sequences against real layout — they need a real browser, not a
+simulated DOM, and the harness's value is that it runs in the page under test with nothing in
+between. A general-purpose runner would add a dependency, a config surface, and a layer of
+indirection to solve a problem this project does not have. What Node buys the tests is the
+*driver* (§23.3), not the runner.
+
+The harness itself therefore keeps its no-build-step, no-runtime-dependency shape and grows to
+maybe 400 lines. Revisit only if the fake clock and fake rAF turn out to be the hard part, in
+which case borrowing a proven implementation beats maintaining one.
 
 ### 23.2 Test categories
 
@@ -2475,10 +2630,24 @@ because the stub path is deterministic by construction.
 
 ### 23.3 Running
 
-- Interactive: `test/index.html` in a browser, as today.
+- Interactive: **serve the project**, then open `test/index.html` — e.g.
+  `python3 -m http.server 8080`. Draft 7 note: ESM sources are fetched, so `file://` is
+  blocked by CORS and the direct-open path drafts 1–6 assumed no longer works (§22.2).
 - Filtered: `test/index.html?filter=geometry/len`.
-- Headless (later): a Python driver using the CDP protocol against Chrome, launched by
-  `tools/run_tests.py`, printing TAP. No Node required — this matters given §2.1.
+- Headless: **Playwright**, reading `window.harness.results` (§23.1) and printing TAP.
+  Replaces the hand-written Python CDP driver that drafts 1–6 specified because no Node was
+  available.
+
+**This is the change that unblocks the R1 exit gate.** The CDP driver would have spoken one
+protocol to one engine; §26's M1 gate and §25.3's baseline both require Chrome *and* Firefox
+*and* Safari, which under the old plan meant implementing two more protocols or running the
+prototype by hand forever. Playwright drives all three from the same script, so
+"`test/proto/split-grid.html` reports PASS in each baseline engine" becomes a CI job instead
+of an open item. Given that R1's only remaining exposure is engine coverage (§27.2), this is
+the highest-value single consequence of having Node — worth more than the size win.
+
+Cross-browser runs are also what §23.2's *measured* snapshot tests need, and what makes
+§23.6's axe-core gate practical to run automatically rather than aspirationally.
 
 ### 23.4 Coverage expectations
 
@@ -2564,9 +2733,18 @@ anywhere.
 
 ### 25.4 Release checklist
 
-Build both outputs · full test suite · a11y suite · leak suite · benchmarks within 10% ·
-examples load without console errors · docs regenerated · CHANGELOG updated ·
-`unpinned.json` version bumped · size budgets checked against §20.1 · tag.
+Build all preset outputs · full test suite **across every §25.3 baseline engine** (§23.3) ·
+a11y suite · leak suite · benchmarks within 10% · examples load without console errors ·
+`tsc --noEmit` clean (§22.5) · docs regenerated · CHANGELOG updated · `unpinned.json` version
+bumped · size budgets checked against §20.1 from esbuild's metafile · `npm ci --ignore-scripts`
+reproduces the build from a clean checkout · tag · publish with `--provenance` from CI.
+
+**Run the thing, don't cite it.** Every release re-runs the artifacts this document reasons
+about rather than quoting their last known result — currently the build and
+`test/proto/split-grid.html` (§27.2 R1). This item exists because the project has twice
+asserted something about code nobody had executed: §22.6's minifier, which turned out to
+silently delete code, and R1's prototype, which turned out to have been reporting FAIL in
+every state. Both were caught by running them. Neither would have been caught by review.
 
 ### 25.5 Distribution
 
@@ -2575,15 +2753,19 @@ it ships:
 
 - **Tagged builds are committed.** `build/` is gitignored during development but its outputs
   are committed on release tags, so a raw GitHub URL or jsDelivr works with no publish
-  infrastructure at all. This is the primary channel until D5 is resolved.
+  infrastructure at all. Draft 7 keeps this even though npm is now available: it is the
+  channel that requires nothing of the consumer, which is §1.4's whole point.
 - **Presets** (§4.2) publish as separate files — `mutakit.core.js`, `mutakit.app.js`,
   `mutakit.dock.js`, `mutakit.hud.js`, `mutakit.js` — each with its expanded and minified
   form, and a size table in the README so the choice is informed.
-- **Subresource integrity** hashes are emitted into `build/manifest.json` (§22.3.6) and
+- **Subresource integrity** hashes are emitted into `build/manifest.json` (§22.3) and
   published in the release notes, so CDN users can pin safely.
-- **npm** (`mutakit`, shipping UMD + ESM + `.d.ts`) requires Node and is therefore gated on
-  D5. Until then the docs lead with the CDN path and say plainly that npm is not yet
-  available, rather than leaving people to discover it.
+- **npm** (`mutakit`, shipping UMD + ESM + `.d.ts`) is unblocked by draft 7 — the gate was
+  D5, now resolved. The package sets `"type": "module"`, an `exports` map with `import`,
+  `require`, and `types` conditions, and `"sideEffects": false` so consumers' bundlers can
+  tree-shake through it. Publishing is `--provenance` from CI, never from a developer's
+  machine. Ship the CDN and npm paths together at 1.0; the docs lead with whichever matches
+  the reader's situation rather than apologising for a missing one.
 - **Versioned URLs only** in documentation examples — never a floating `@latest`, which
   turns a patch release into everyone's outage.
 
@@ -2598,8 +2780,19 @@ example and a passing test suite.
 Module system (§22.2), kernel, registries, diagnostics, error isolation (§8.10), node
 identity (§8.9), event system, DOM adapter, harness upgrades (§23.1), build changes (§22.3),
 architectural lint (§22.4). Housekeeping: `hello()` and the four starter tests are deleted,
-`README.md` is rewritten against the real API, `unpinned.json` gains the new file list, and
-`CHANGELOG.md` records the scaffold's removal as a breaking change.
+`README.md` is rewritten against the real API, and `CHANGELOG.md` records the scaffold's
+removal as a breaking change.
+
+**Toolchain migration lands here** *(draft 7)*, because M0 already rewrites the module system
+and doing both at once avoids porting the registry design to ESM twice: `package.json` and a
+pinned lockfile, `build.mjs` on esbuild, Playwright wired to the §25.3 baseline engines, the
+Python tools ported to Node, and `build.py` + `tools/test_build.py` deleted. `unpinned.json`
+loses its ordered `source.files` array rather than gaining a new one.
+
+**Do the Playwright half first.** It is the only part with a result waiting on it — R1's exit
+gate needs Firefox and Safari runs of an *existing* prototype (§27.2), so cross-engine CI pays
+off before any of M0's own code exists, and it de-risks M1's gate rather than arriving
+alongside it.
 **Demo:** `mk.create('pane', …)` renders a positioned box, and a deliberately broken plugin
 fails without taking the tree down. **Version:** 0.3.0
 
@@ -2682,11 +2875,11 @@ Decision records live in `docs/adr/`. Marked `⚑` in the text above.
 
 | # | Question | Status |
 |---|---|---|
-| **D1** | **Language baseline.** Stay ES5, or move to ES2020? | **Resolved: ES2020**, on evidence rather than assertion — see §22.6. A 31-case probe of `build.py`'s minifier confirmed correct handling of arrow functions, optional chaining, logical assignment, private and static class fields, `for await`, numeric separators, BigInt, and every regex-versus-division ambiguity tested. It also found a **real bug** in nested template literals, now fixed and covered by `tools/test_build.py`. The §25.3 browser baseline already exceeds ES2020. Cost: source is no longer copy-pasteable into ancient environments — acceptable. |
+| **D1** | **Language baseline.** Stay ES5, or move to ES2020? | **Resolved: ES2020**, on evidence rather than assertion — see §22.6. A 31-case probe of `build.py`'s minifier confirmed correct handling of arrow functions, optional chaining, logical assignment, private and static class fields, `for await`, numeric separators, BigInt, and every regex-versus-division ambiguity tested. It also found a **real bug** in nested template literals, now fixed and covered by `tools/test_build.py`. The §25.3 browser baseline already exceeds ES2020. Cost: source is no longer copy-pasteable into ancient environments — acceptable. *(Draft 7: the probe and the minifier it tested are both retired with the move to esbuild, but the resolution stands on firmer ground — a production bundler's ES2020 support needs no probe, and the language baseline is now enforced by `tsconfig.json` and esbuild's `target` rather than by a hand-written scanner.)* |
 | **D2** | Offset sign convention for edge anchors. | **Resolved** (§5.5): `offset` is screen-axis; `inset` is the recommended edge-relative spelling. |
 | **D3** | "Split vertically" ambiguity. | **Resolved** (§5.9): `axis` is canonical; orientation words are separator-describing aliases with a dev-mode note. |
 | **D4** | Shadow DOM: default or opt-in? | **Proposed: opt-in** (§12.2). Light DOM's stylability and form/focus behaviour outweigh encapsulation for the primary audience. Revisit if embedding complaints dominate. |
-| **D5** | Adopt Node tooling before 1.0? | **Open.** Currently no; §22.2 is designed so the answer can change cheaply. Triggers that would change it: minified size becoming the binding constraint (§20.4), or headless CI proving painful in Python. |
+| **D5** | Adopt Node tooling before 1.0? | **Resolved: yes** *(draft 7)*, when Node became available and dependencies were permitted. Decided on **capability**, not size: cross-engine headless testing (§23.3, which unblocks the R1 gate), `tsc`-verified types (§22.5), tree-shaking (§22.2), and source maps (§22.3). §20.4's finding held — the gzipped size delta was only ~1 KB, so size alone would never have justified it, and the plan was right to refuse to decide on that basis. The migration cost §22.2 was designed to keep cheap was in fact cheap: the `name`/`deps`/`factory` registry maps onto `import`/`export` mechanically, as predicted. **Scope of the yes:** build-time only. Runtime dependencies remain zero by default (§2.1). |
 | **D6** | Transformed (rotated/scaled) ancestors. | **Partially resolved** (§5.4): supported for hit-testing and dragging; layout math warns. Full support needs a matrix-aware ARRANGE — deferred past 1.0 unless a real use case appears. |
 | **D7** | Alternate style backends (atomic classes, constructable sheets). | **Open** (§10.15). The extension point is specified; no implementation planned before 1.0. |
 | **D8** | Should `signals` be core or a plugin? | **Resolved: core**, optional at every call site. The §20.5 accounting puts it at ~0.5 KB gzipped, cheap enough that the scheduler-integration argument (§15.1) wins uncontested. |
@@ -2695,7 +2888,7 @@ Decision records live in `docs/adr/`. Marked `⚑` in the text above.
 | **D11** | Who owns an adopted DOM node's internals? | **Resolved** (§8.8): Mutakit writes only geometry properties and `data-mk-*` attributes, never children, classes, or listeners. This guarantee is what makes framework adapters trivial, so it is versioned API (§25.1). |
 | **D12** | Should a throwing plugin take down the tree? | **Resolved: no** — `errorPolicy: 'isolate'` is the default (§8.10). The subtree is replaced by a placeholder that preserves geometry, so failure stays visually local. |
 | **D13** | Reimplement anchored positioning, or adapt Floating UI? | **Proposed: reimplement**, treating Floating UI's published algorithm as the reference specification (§1.6). The zero-dependency constraint is load-bearing for the `<script>`-tag story. Revisit at M3 if the fallback path (§16.3) proves unreliable across browsers — the fallback is where this will hurt if it does. |
-| **D14** | Publish to npm before 1.0? | **Open**, gated on D5. The committed-tag CDN path (§25.5) covers the primary audience meanwhile. |
+| **D14** | Publish to npm before 1.0? | **Resolved: yes** *(draft 7)*, ungated by D5. Ship npm and the committed-tag CDN path (§25.5) together rather than treating either as primary — they serve different readers, and the `<script>`-tag audience of §1.4 is not a fallback for people who failed to have a bundler. Package details in §25.5. |
 | **D15** | Should a layout algorithm be able to declare the props it expects on its children? | **Resolved: yes** (§7.0). `childProps` schema on the algorithm; child values live in a reserved `layout` bag rather than merged into the element's props, which avoids the `size`-means-two-things collision. Validation is strictly one level — only the immediate parent — which settles the reparenting question that kept this open: re-validate on reparent, unknown keys report MK2012 but are retained so the move is reversible. Formalizes what `split` and `grid` already did informally. |
 
 **Open questions with no decision yet:**
@@ -2834,11 +3027,30 @@ plausibly multi-year for a small team. *Signal:* M2 slipping well past M1's elap
 are independently useful. M4–M6 are genuinely optional, and shipping 1.0 with Tier B
 incomplete is an acceptable outcome, not a failure.
 
-**R3 — The no-Node constraint becomes a tax.** Types (§22.5), headless CI (§23.3), and
-identifier mangling (§20.4) all want a JS toolchain. *Signal:* two of the three become
-blocking in the same milestone. *Response:* D5, which §22.2 was deliberately designed to
-make cheap to flip. Note §20.4's finding that size alone is **not** a sufficient reason —
-the gzipped delta is ~1 KB.
+**R3 — The no-Node constraint becomes a tax.** ~~Types (§22.5), headless CI (§23.3), and
+identifier mangling (§20.4) all want a JS toolchain.~~ **Retired in draft 7** — Node arrived
+and D5 resolved yes before this risk could materialise. Recorded rather than deleted because
+it called its shot: the response was "D5, which §22.2 was deliberately designed to make cheap
+to flip", and the flip was in fact cheap. Designing a module system so that a constraint could
+be reversed later is the reason this cost a rewrite of §22.2 rather than a rewrite of the
+source tree.
+
+**R3′ — Toolchain dependencies become their own tax** *(new in draft 7, replacing R3)*. The
+constraint that just lifted was also a discipline: a project that cannot `npm install` cannot
+accumulate a dependency tree, and drafts 1–6 got real architectural clarity from that. The
+exposures now are supply chain (every build-time dependency is code executing on a developer
+machine and in CI, with publish credentials nearby), and drift — the gradual arrival of
+dependencies that solve problems the project does not have.
+*Signal:* the lockfile grows without a corresponding decision record; or a build-time
+dependency's transitive tree exceeds a handful of packages; or anyone proposes a **runtime**
+dependency without measuring it against §20.1.
+*Response:* keep the build-critical set deliberately tiny — esbuild, Playwright, TypeScript,
+and little else — pin exact versions, commit the lockfile, and require CI to install with
+`npm ci --ignore-scripts`. Publish with `--provenance` from CI only, never from a developer
+machine (§25.5). §2.1's two-budget rule is the standing test: if it reaches a user's page it
+needs a decision record and a size measurement; if it only builds the project, keep it few and
+pinned. Note this risk is *cheaper to be wrong about* than R3 was — a dependency can be
+removed, whereas the capabilities R3 blocked simply did not exist.
 
 **R4 — Accessibility debt accrues invisibly.** It is the classic thing deferred to "before
 1.0" and then never done. *Signal:* any element type shipping with an `a11y` opt-out that

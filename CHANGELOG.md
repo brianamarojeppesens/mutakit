@@ -95,6 +95,20 @@ legible on screen rather than merely detectable.
 PLAN.md revisions, newest first. Each draft was a pass for depth or for evidence; the
 recurring pattern is that writing something out end to end found gaps that reading it had not.
 
+- **Draft 7** (2026-08-06) — **The toolchain constraint lifted.** Node is on PATH and
+  dependencies are permitted, so §2.1's four constraints were rewritten and every section
+  resting on them followed. **D5 resolved: yes** — on capability (cross-engine headless
+  testing, `tsc`-verified types, tree-shaking, source maps), not size; §20.4's finding that
+  the gzipped penalty was only ~1 KB held, so size would have been the wrong reason.
+  **D14 resolved: yes**, ungated — npm and the committed-tag CDN path ship together. §22.2
+  drops the IIFE-registry module system for plain ESM; §22.3 replaces `build.py` with
+  esbuild; §23.3 replaces the hand-written Python CDP driver with Playwright. §2.1 now states
+  a **two-budget rule**: build-time dependencies are free, runtime dependencies stay zero by
+  default, because §1.1's dependency-free claim describes the shipped artifact and not the
+  workshop. R3 (the no-Node tax) retires; **R3′** replaces it, covering supply chain and
+  dependency drift, and §21.4 gains the build as an acknowledged attack surface.
+  Nothing under `source/`, `build.py`, or `tools/` has changed yet — the migration is
+  scheduled into M0, so this entry is design only.
 - **Draft 6** (2026-08-06) — Cleared the three highest-value open items. **D1 resolved on
   evidence** (§22.6): the minifier probe above confirmed ES2020 support, so the language
   baseline moves from ES5 to ES2020; the cost is that source is no longer copy-pasteable into
