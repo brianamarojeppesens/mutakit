@@ -1,11 +1,24 @@
 /**
  * The cross-engine gate (§23.3, §26 M1).
  *
- * Two specs, both of which read a page's own verdict rather than re-deriving
- * it: the harness reports through `window.harness`, and the R1 prototype
- * reports its own PASS/FAIL. Running them across all three baseline engines is
+ * The harness reports through `window.harness`, and this reads that verdict
+ * rather than re-deriving it. Running it across all three baseline engines is
  * what §26's M1 exit gate asks for, and what §25.4's "run the thing, don't
  * cite it" item points at.
+ *
+ * There was a second spec here, asserting that test/proto/split-grid.html set
+ * `document.documentElement.dataset.verdict` to "pass". That page has never
+ * set that attribute, nor the `window.__r1` the spec went on to read: it
+ * renders a sentence into `#verdict` for a person to read after dragging a
+ * gutter. The spec was written against an API that does not exist and was
+ * never run, so nothing said so — it went straight to a 15-second timeout the
+ * first time CI executed it.
+ *
+ * It is not replaced, because what it was reaching for is already covered
+ * better. `npm run r1` drives the deterministic split-grid-measure.html in
+ * every installed engine and diffs all 42 cases against the committed
+ * baseline, which is a stronger claim than one page's PASS/FAIL, and it runs
+ * as its own CI job.
  */
 import { expect, test } from "@playwright/test";
 
@@ -21,18 +34,4 @@ test("the harness passes", async ({ page }) => {
   expect(failed.map((r) => `${r.name}: ${r.error}`)).toEqual([]);
   expect(results.length).toBeGreaterThan(0);
   expect(pageErrors).toEqual([]);
-});
-
-test("the R1 split-grid prototype reports PASS", async ({ page }) => {
-  await page.goto("/test/proto/split-grid.html");
-  await page.waitForFunction(() => document.documentElement.dataset.verdict !== undefined, null, {
-    timeout: 15_000
-  });
-  const verdict = await page.evaluate(() => ({
-    verdict: document.documentElement.dataset.verdict,
-    rows: window.__r1 ? window.__r1.rows : []
-  }));
-  // `distribute` overrunning a maximum is the analysed, accepted outcome
-  // (§27.2 R1) — the one result other engines should reproduce, not contradict.
-  expect(verdict.verdict).toBe("pass");
 });
