@@ -43,22 +43,22 @@ class Assert {
   }
 
   ok(value, message) {
-    this._record(!!value, message || `expected a truthy value, got ${format(value)}`);
+    this._record(!!value, why(message, `expected a truthy value, got ${format(value)}`));
   }
 
   notOk(value, message) {
-    this._record(!value, message || `expected a falsy value, got ${format(value)}`);
+    this._record(!value, why(message, `expected a falsy value, got ${format(value)}`));
   }
 
   equal(actual, expected, message) {
     this._record(
       Object.is(actual, expected),
-      message || `expected ${format(expected)}, got ${format(actual)}`
+      why(message, `expected ${format(expected)}, got ${format(actual)}`)
     );
   }
 
   notEqual(actual, expected, message) {
-    this._record(!Object.is(actual, expected), message || `expected not ${format(expected)}`);
+    this._record(!Object.is(actual, expected), why(message, `expected not ${format(expected)}`));
   }
 
   /** Numeric comparison with a tolerance — sub-pixel rounding is not a bug. */
@@ -66,14 +66,14 @@ class Assert {
     const tolerance = epsilon == null ? 0.5 : epsilon;
     this._record(
       Math.abs(actual - expected) <= tolerance,
-      message || `expected ${expected} ± ${tolerance}, got ${actual}`
+      why(message, `expected ${expected} ± ${tolerance}, got ${actual}`)
     );
   }
 
   deepEqual(actual, expected, message) {
     const a = JSON.stringify(actual);
     const b = JSON.stringify(expected);
-    this._record(a === b, message || `expected ${b}, got ${a}`);
+    this._record(a === b, why(message, `expected ${b}, got ${a}`));
   }
 
   throws(fn, pattern, message) {
@@ -112,6 +112,20 @@ class Assert {
     this.cleanup(() => el.remove());
     return el;
   }
+}
+
+/**
+ * A written message and the values, never one instead of the other.
+ *
+ * These read `message || \`expected …, got …\``, so writing the sentence that
+ * explains *why* an assertion matters silently threw away *what* it saw. The
+ * timer-leak check said "timers return to baseline, not below it" and did not
+ * say by how much or in which direction, which is most of what you need in
+ * order to act on it — and exactly the assertions worth explaining are the ones
+ * that get a message.
+ */
+function why(message, detail) {
+  return message ? `${message} — ${detail}` : detail;
 }
 
 function format(value) {

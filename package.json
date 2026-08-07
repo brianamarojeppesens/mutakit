@@ -45,7 +45,7 @@
     "lint": "node tools/lint-arch.mjs",
     "types": "node build.mjs && tsc --noEmit",
     "docs": "node tools/gen-docs.mjs",
-    "test:unit": "node --test test/unit/",
+    "test:unit": "node --test \"test/unit/**/*.test.js\"",
     "test:browser": "node tools/serve.mjs --run",
     "test": "npm run test:unit && npm run lint && npm run build && npm run test:browser",
     "serve": "node tools/serve.mjs",

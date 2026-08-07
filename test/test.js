@@ -587,13 +587,18 @@ describe("traits (§9)", () => {
     button.on("focus", () => seen.push("focus"));
     button.el.focus();
     t.equal(document.activeElement, button.el, "focus() lands");
-    // Dispatched rather than awaited: a headless or unfocused window delivers
-    // the real focus event late or not at all, and that is a property of the
-    // window manager, not of the trait. `focusin` is what a browser emits
-    // alongside `focus`, and unlike `focus` it bubbles — which is what lets one
-    // listener serve both the element itself and a native control it wraps.
-    button.el.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
-    t.deepEqual(seen, ["focus"]);
+    // `focusin` is what a browser emits alongside `focus`, and unlike `focus`
+    // it bubbles — which is what lets one listener serve both the element and a
+    // native control it wraps. A window that does not have focus may not
+    // deliver it from the `.focus()` above, so this stands in for it.
+    //
+    // Only when it is actually absent. Dispatching unconditionally added a
+    // second event wherever the real one *did* arrive, which is every engine
+    // driven by Playwright — the assertion then read two focus events and
+    // blamed the trait. It reproduced identically in Chromium, Firefox and
+    // WebKit, because it was never an engine difference.
+    if (!seen.length) button.el.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    t.deepEqual(seen, ["focus"], "one focus event per focus, however it arrived");
     mk.tick();
     t.equal(button.el.getAttribute("data-mk-focused"), "");
   });

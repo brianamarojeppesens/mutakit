@@ -222,15 +222,49 @@ function finish(axeResults) {
     results.appendChild(item);
   }
   document.documentElement.setAttribute("data-harness", failed ? "fail" : "pass");
+
+  // `results` used to be the violations and nothing else, which made a clean
+  // sweep indistinguishable from a sweep that never ran: both are the empty
+  // array, and a driver reading it reports "no failures" for both. Worse, two
+  // of the three things counted in `failed` — an unrendered type and a dangling
+  // ARIA reference — produced no entry at all, so the page could set
+  // data-harness="fail" while the TAP stream said everything passed.
+  //
+  // The structural checks are therefore always reported, pass or fail, and the
+  // sweep reports itself. Silence is no longer a result.
+  const checks = [
+    {
+      name: `axe sweep ran (${rendered.length} types, ${axeResults.passes.length} checks)`,
+      passed: rendered.length > 0 && axeResults.passes.length > 0,
+      skipped: false,
+      error: "the sweep produced no passing checks, so it did not run"
+    },
+    {
+      name: "every catalogued type is rendered by this page",
+      passed: missing.length === 0,
+      skipped: false,
+      error: missing.length ? `not rendered: ${missing.join(", ")}` : null
+    },
+    {
+      name: "no dangling ARIA references",
+      passed: extraFailures === 0,
+      skipped: false,
+      error: extraFailures ? "an aria-* attribute points at an id that is not in the document" : null
+    }
+  ];
+
   window.harness = {
     done: true,
-    results: axeResults.violations.map((v) => ({
-      name: v.id,
-      passed: false,
-      skipped: false,
-      error: v.help,
-      nodes: v.nodes.length
-    })),
+    results: [
+      ...checks,
+      ...axeResults.violations.map((v) => ({
+        name: `${v.id} (${v.impact})`,
+        passed: false,
+        skipped: false,
+        error: v.help,
+        nodes: v.nodes.length
+      }))
+    ],
     summary: { passed: axeResults.passes.length, failed, skipped: 0, rendered, missing }
   };
 }
