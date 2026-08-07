@@ -18,7 +18,8 @@
   minifier and `tools/test_build.py` with it; §23.3 replaces the hand-written CDP driver with
   Playwright. The single most valuable consequence is not size: it is that **R1's outstanding
   exit gate becomes a CI job**, since Firefox and Safari are now one config line each rather
-  than two protocol implementations (§26 M0 sequences this first). New: source maps, real
+  than two protocol implementations (§26 M0 sequences this first). *Draft 8: that is what
+  happened — `npm run r1` discharged the gate, and all three engines agree.* New: source maps, real
   tree-shaking, `tsc`-verified types. §2.1 now states a **two-budget rule** — build-time
   dependencies are free, runtime dependencies stay zero by default — because §1.1, §1.4, D13
   and §20.1 all rest on the shipped artifact having none. R3 retires; **R3′** replaces it,
@@ -927,7 +928,9 @@ costs an O(n²) expression — so `push` walks the cascade in JavaScript during 
 writes explicit sizes, which CSS then re-clamps idempotently. This is consistent with P1:
 JavaScript computes numbers only when interaction demands it, and the idle path stays free.
 
-*Measured, not assumed* (Chrome, 2026-08-06 — see §27.2 R1 for the full table). Every bound
+*Measured, not assumed* (Chrome, 2026-08-06 — see §27.2 R1 for the full table; the same
+construct was re-measured in draft 8 across Chromium, Firefox, and WebKit, which agree on
+all 42 cases). Every bound
 above held with JavaScript writing deliberately out-of-range values: `--w0: 3px` produced a
 64px track, `--w0: 1015px` produced 380px, `--w1: -71px` produced 80px. The neighbour-
 exhaustion cap resolved to the arithmetically exact value (166.4px in a 358.4px container).
@@ -2992,8 +2995,10 @@ Distinct from the decision log: these are not choices to be made but things that
 derail the project regardless of what is chosen. Each carries the **signal** that it is
 happening and the **response** — because a risk with no trigger condition is just anxiety.
 
-**R1 — The CSS-delegation bet fails for splits.** *(Was the highest technical risk;
-downgraded — see below.)*
+**R1 — The CSS-delegation bet fails for splits.** *(Was the highest technical risk.
+Downgraded in draft 6 on analysis; **closed in draft 8 on measurement** — all three §25.3
+baseline engines resolve the construct identically. See the exit gate at the end of this
+entry.)*
 P1 assumes the browser can express §7.3's behaviour natively. If CSS Grid's `minmax()`/`fr`
 clamping cannot reproduce the specified clamping cascade, track sizes must be computed in
 JavaScript, weakening P1's performance and size arguments.
@@ -3086,11 +3091,16 @@ pure-CSS path.
 solver can do better, and `split` should treat this as defined behaviour, but the prototype's
 overflow check currently calls it a failure.
 
-*Remaining exposure:* **engine coverage.** Only Chrome was tested; no other engine was
-available in the session. Firefox 113+ and Safari 16.4+ from the §25.3 baseline remain
-unverified, and nested `clamp()`/`min()` with percentages inside `grid-template-columns` is
-exactly the kind of construct where engines have historically differed. The risk is now
-narrow and specific rather than open-ended.
+*Remaining exposure (drafts 6–7):* **engine coverage.** Only Chrome was tested; no other
+engine was available in the session. Firefox 113+ and Safari 16.4+ from the §25.3 baseline
+remained unverified, and nested `clamp()`/`min()` with percentages inside
+`grid-template-columns` is exactly the kind of construct where engines have historically
+differed. The risk was narrow and specific rather than open-ended.
+
+*Closed in draft 8.* Measured in all three: they agree on all 42 cases. The paragraph above
+is kept because the exposure was real for two drafts and the shape of the worry is what the
+measurement was built to answer — it named the construct, and the construct is what turned
+out to be fine.
 *Signal:* the other two baseline engines disagree with the Chrome numbers above — in
 particular a `cap0` that does not resolve to the exact arithmetic value, which would mean
 percentages resolve against a different box.
@@ -3113,13 +3123,31 @@ the committed Chrome baseline (`test/proto/r1-baseline.json`, 42 cases). The com
 keeps two decimal places, because §27.2's own stated signal is a `cap0` that misses the
 exact arithmetic value.
 
-**The gate is now one command, and still open.** An engine that cannot launch is reported
-as *unavailable*, never as agreeing — a gate that counts a missing engine as a pass is
-worse than an open one, because it looks closed. Chrome is measured and committed; Firefox
-and WebKit remain unrun in this environment, which is a confined sandbox with no GTK or
-GStreamer stack (the WebKit binary alone wants 50 absent shared objects, and Firefox is
-additionally refused a user namespace). Running the command anywhere with browsers
-installed discharges the remaining two-thirds.
+**Discharged (draft 8).** With the browsers installed, `npm run r1` reports:
+
+```
+  chromium  agrees with the baseline on all 42 cases
+  firefox   agrees with the baseline on all 42 cases
+  webkit    agrees with the baseline on all 42 cases
+
+  3 of 3 engines measured. R1's exit gate is discharged.
+```
+
+Chromium, Gecko, and WebKit resolve nested `clamp()`/`min()` with a percentage inside
+`grid-template-columns` to the same numbers, at half-pixel tolerance, across every bound
+from both sides, the flexible track with and without a maximum, and the below-Σ-mins case
+where minimums win and the container overflows. The specific failure this risk was watching
+for — a `cap0` resolving against a different box in another engine — does not occur.
+
+**What this closes.** P1's central bet is now measured rather than assumed on the one
+construct that put it at risk: `split` needs no JavaScript track solver for the CSS-legal
+path, and §7.3's fallback rule stays what it was designed to be — a bound on `distribute`
+with finite maxima, not a concession about engines. The `anchor` and `stack` paths were
+never exposed either way.
+
+An engine that cannot launch is still reported as *unavailable* rather than as agreeing: a
+gate that counts a missing engine as a pass is worse than an open one, because it looks
+closed. That mattered while it was open and it is what makes this result mean something now.
 
 **R2 — Scope exceeds capacity.** The engine, catalog, accessibility, devtools, and docs are
 plausibly multi-year for a small team. *Signal:* M2 slipping well past M1's elapsed effort.
@@ -3541,7 +3569,7 @@ reserve space via the inset stack.
 |---|---|---|
 | Application shell | §7.4 `dock`, corner arbitration | ✅ |
 | Recursive splits | §7.3, nested via pane handles | ✅ |
-| Drag separators | §7.3 pointer capture, hit slop, clamping cascade | ✅ *(R1 measured in Chrome and committed as a baseline; `node tools/r1-measure.mjs` discharges Firefox/WebKit wherever they are installed — §27.2)* |
+| Drag separators | §7.3 pointer capture, hit slop, clamping cascade | ✅ *(R1 discharged — Chromium, Firefox, and WebKit agree on all 42 cases; `npm run r1`, §27.2)* |
 | Keyboard resize | §7.3 `role="separator"`, arrows/Home/End | ✅ |
 | Min / max / collapse | §5.8 clamps, §7.3 `collapsible` | ✅ |
 | Persistence | §19.1 | ⚠️ **gap → fixed** |

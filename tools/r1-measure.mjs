@@ -85,7 +85,7 @@ async function main() {
     return;
   }
 
-  const report = { baseline: baseline.engine, engines: {} };
+  const report = { baseline: baseline.engine, recorded: baseline.crossEngine || null, engines: {} };
   for (const name of ENGINES) {
     const result = results[name];
     report.engines[name] =
@@ -172,12 +172,21 @@ function print(report) {
     }
   }
   const measured = Object.values(report.engines).filter((e) => e.status === "measured").length;
-  console.log(
-    `\n  ${measured} of ${ENGINES.length} engines measured. ` +
-      (measured === ENGINES.length
-        ? "R1's exit gate is discharged."
-        : "R1 stays open until the rest are: an engine that cannot run has not agreed.")
-  );
+  console.log(`\n  ${measured} of ${ENGINES.length} engines measured in this run.`);
+
+  // What this run saw and what the gate has on record are different facts, and
+  // conflating them goes wrong in both directions: an environment with no
+  // browsers would report a discharged gate as open, and a recorded pass would
+  // excuse a run that measured nothing. Print both, labelled.
+  if (measured === ENGINES.length) {
+    console.log("  R1's exit gate is discharged by this run.");
+  } else if (report.recorded) {
+    const { verified, engines, result } = report.recorded;
+    console.log(`  R1 was discharged on ${verified}: ${engines.join(", ")} — ${result}.`);
+    console.log("  This run adds nothing to that; an engine that cannot launch has not agreed.");
+  } else {
+    console.log("  R1 stays open: an engine that cannot run has not agreed.");
+  }
 }
 
 /**

@@ -11,6 +11,21 @@ migration guide (PLAN.md §26 M7).
 
 ### Changed
 
+- **R1 is discharged** (PLAN.md §27.2) — the last open risk, and P1's central
+  bet. Chromium, Firefox, and WebKit resolve nested `clamp()`/`min()` with a
+  percentage inside `grid-template-columns` to the same numbers across all 42
+  cases, at half-pixel tolerance. The failure the risk was watching for — a
+  `cap0` resolving against a different box in another engine — does not occur,
+  so `split` needs no JavaScript track solver on the CSS-legal path.
+
+  What had actually blocked this for two drafts was not the question but the
+  harness: `split-grid.html` is interactive, so discharging the gate meant a
+  person dragging a gutter in three browsers and reading a verdict off the
+  screen. `split-grid-measure.html` asks it deterministically and publishes
+  what the engine resolved; `npm run r1` diffs every installed engine against
+  the committed Chrome baseline. An engine that cannot launch reports as
+  *unavailable*, never as agreeing.
+
 - **§20.1's size budget is revised: core ≤ 33 KB gzipped, full ≤ 76 KB** (was
   8.5 KB and 32 KB). §20.5 asks that a module coming in over budget be "a
   finding worth a line in the changelog rather than a quiet budget revision" —

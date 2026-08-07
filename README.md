@@ -144,8 +144,12 @@ MK_ENGINES=chromium,firefox node tools/serve.mjs --run   # TAP output
 reporting their own PASS/FAIL. They must be served, not opened over `file://`.
 
 - `split-grid.html` — whether CSS Grid alone expresses the `split` clamping
-  cascade (PLAN.md §27.2 R1). Passes in Chrome; the cross-engine runs are the
-  M1 exit gate and are wired into `test/e2e/`.
+  cascade (PLAN.md §27.2 R1). Interactive: drag a gutter and read the verdict.
+- `split-grid-measure.html` — the same question, deterministically. 42 cases,
+  no dragging, publishing what the engine resolved rather than a verdict.
+  `npm run r1` collects it from every installed engine and diffs against the
+  committed Chrome baseline. **Chromium, Firefox, and WebKit agree on all 42**,
+  which discharges R1 — P1's central bet, measured rather than assumed.
 
 ## Checks
 

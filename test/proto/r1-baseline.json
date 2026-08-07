@@ -1,5 +1,5 @@
 {
- "note": "R1 (§27.2) exit-gate baseline. Regenerate with `node tools/r1-measure.mjs --record`.",
+ "note": "R1 (\u00a727.2) exit-gate baseline. Regenerate with `node tools/r1-measure.mjs --record`; compare every installed engine with `npm run r1`.",
  "engine": "Chrome/150 (Linux x86_64)",
  "recorded": "2026-08-07",
  "limits": {
@@ -641,5 +641,15 @@
    ],
    "sum": 256
   }
- ]
+ ],
+ "crossEngine": {
+  "verified": "2026-08-07",
+  "engines": [
+   "chromium",
+   "firefox",
+   "webkit"
+  ],
+  "result": "all three agree on all 42 cases at half-pixel tolerance",
+  "discharges": "R1 (\u00a727.2) \u2014 see the risk register entry"
+ }
 }
