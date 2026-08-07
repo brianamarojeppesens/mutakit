@@ -171,10 +171,49 @@ for (const code of [...catalogued].sort()) {
   }
 }
 
-// ── 5. every module parses ─────────────────────────────────────────────
-// Cheap, and it catches the one mistake this codebase keeps making: a backtick
-// inside a comment *inside* a tagged template literal ends the template, and
-// the rest of the file is then parsed as code. Twice now.
+// ── 5a. no backtick in a comment inside a template literal ─────────────
+//
+// The mistake this codebase keeps making, now four times. Inside css`…` a
+// `/* */` is CSS text, not a JavaScript comment — so a backtick written in it
+// ends the template, and every rule after it is parsed as code. The parser then
+// complains about a CSS keyword a hundred lines further down, which says
+// nothing about the comment that caused it.
+//
+// Checking the parse alone is not enough: the failure surfaces at whichever
+// *entry* imported the file, so the reported path is not the one to edit.
+for (const file of files) {
+  const text = await readFile(file, "utf8");
+  let inTemplate = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === "\\") {
+      i++;
+    } else if (ch === "`") {
+      inTemplate = !inTemplate;
+    } else if (inTemplate && ch === "/" && text[i + 1] === "*") {
+      const end = text.indexOf("*/", i + 2);
+      const body = text.slice(i + 2, end === -1 ? text.length : end);
+      const tick = body.indexOf("`");
+      if (tick !== -1) {
+        const line = text.slice(0, i + 2 + tick).split("\n").length;
+        problems.push(
+          `${path.relative(ROOT, file)}:${line}: backtick in a comment inside a ` +
+            `template literal — it ends the template. Reword without backticks.`
+        );
+        break; // Everything after this point is mis-lexed; one report is enough.
+      }
+      i = end === -1 ? text.length : end + 1;
+    } else if (!inTemplate && ch === "/" && text[i + 1] === "/") {
+      i = text.indexOf("\n", i);
+      if (i === -1) break;
+    } else if (!inTemplate && ch === "/" && text[i + 1] === "*") {
+      const end = text.indexOf("*/", i + 2);
+      i = end === -1 ? text.length : end + 1;
+    }
+  }
+}
+
+// ── 5b. every module parses ────────────────────────────────────────────
 for (const file of files) {
   try {
     await import(pathToFileURL(file).href);
