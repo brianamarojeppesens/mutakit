@@ -24,12 +24,14 @@ and the library resolves layout, interaction, accessibility, and styling.
 No build step, no framework, no runtime dependencies. A draggable split and a
 centred modal in the same vocabulary.
 
-> **Status: 0.9.0 — M0 through M6 complete, M7 in progress.** All three driving
+> **Status: 1.0.0 — the API is frozen (PLAN.md §25.1).** All three driving
 > scenarios work: recursive splits with persistence (S1), the overlay and form
 > catalog (S2), and the HUD family at frame rate (S3). 58 element types, seven
 > layout algorithms, thirteen traits, nine gesture recognizers, five presets.
-> 150 browser tests, 128 unit tests, zero axe-core violations, and every
-> performance budget met.
+> 151 browser tests, 128 unit tests, zero axe-core violations, and every
+> performance budget met. The risk register and the decision log both close
+> empty: R1, the CSS-delegation bet P1 rests on, is discharged across
+> Chromium, Firefox, and WebKit.
 >
 > **Every budget in §20.1 is met.** Core measures 31.70 KB gzipped against 33 KB
 > and the full preset 73.73 KB against 76 KB — figures revised in draft 8 from

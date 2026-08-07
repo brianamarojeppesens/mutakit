@@ -46,7 +46,12 @@ const GEOMETRY_KEYS = new Set([
 const RAW_DOM_KEYS = new Set(["class", "style"]);
 
 const STRUCTURAL_KEYS = new Set([
-  "id", "key", "traits", "algorithm", "content", "slots", "children", "on", "command",
+  // `before` is the insertion anchor `create` passes to `parent.insert` — an
+  // engine key like `id` or `traits`, and it was missing from this list, so
+  // the engine reported its own documented option as an undeclared prop.
+  // `split` uses it for every gutter, which put an MK3004 in the console of
+  // any application with a split in it, blaming an element that never saw it.
+  "id", "key", "before", "traits", "algorithm", "content", "slots", "children", "on", "command",
   "class", "style", "hidden", "a11y", "layer", "layout", "measureSync"
 ]);
 

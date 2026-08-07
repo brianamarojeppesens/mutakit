@@ -2,7 +2,7 @@
   "name": "mutakit",
   "title": "Mutakit",
   "description": "A dependency-free browser library that builds and mutates graphical user interfaces from declarative geometry.",
-  "version": "0.9.0",
+  "version": "1.0.0",
   "kind": "library",
   "author": "Brian Amaro-Jeppesen",
   "created": "2026-07-25",
@@ -10,7 +10,7 @@
   "source": {
     "dir": "source",
     "entry": "source/entries/full.js",
-    "note": "The ordered file list is gone: the ES module import graph supersedes it, and build/manifest.json reports what actually shipped after tree-shaking (PLAN.md §22.1)."
+    "note": "The ordered file list is gone: the ES module import graph supersedes it, and build/manifest.json reports what actually shipped after tree-shaking (PLAN.md \u00a722.1)."
   },
   "build": {
     "dir": "build",
@@ -24,6 +24,6 @@
     "entry": "test/index.html",
     "unit": "npm run test:unit",
     "port": 8080,
-    "note": "ES modules are fetched, so the harness must be served — `npm run serve`."
+    "note": "ES modules are fetched, so the harness must be served \u2014 `npm run serve`."
   }
 }

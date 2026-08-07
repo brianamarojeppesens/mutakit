@@ -4,10 +4,18 @@ All notable changes to Mutakit are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased] — M7: toward 1.0
+## [1.0.0] — 2026-08-07
 
-The accessibility audit, the benchmark suite, the performance record, and the
-migration guide (PLAN.md §26 M7).
+M7 (PLAN.md §26): the accessibility audit, the benchmark suite, the performance
+record, and the migration guide — and the two items 1.0 was actually gated on,
+both closed on measurement rather than argument.
+
+**The API is frozen from here** (§25.1). The geometry–style contract of §12.4,
+the adoption contract of §8.8, the element contract of §8.1, and the fifteen
+extension points of §10 are versioned surface; breaking any of them needs a
+major. The deprecation policy of §25.2 is in force: a deprecated API keeps
+working for one full minor cycle, warns once with a code and a migration hint,
+and is listed here under **Deprecated** with its removal version.
 
 ### Changed
 
