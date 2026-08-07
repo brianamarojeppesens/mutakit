@@ -6,11 +6,14 @@
 >
 > Measured at 0.9.0, Chrome-targeted build (`chrome111, firefox113, safari16.4`),
 > production output with dev code stripped and CSS templates minified.
+> **Re-measured after motion (§17), gestures (§13.3), stores (§15.3), and the
+> collection traits (§9) landed** — see "The full preset since" below, which is
+> why the proposed full-bundle figure moved.
 
 ## The finding
 
-**Core measures 29.65 KB gzipped against §20.1's 8.5 KB budget — 3.5× over.**
-The full preset measures 60.64 KB against 32 KB — 1.9× over.
+**Core measures 29.87 KB gzipped against §20.1's 8.5 KB budget — 3.5× over.**
+The full preset measures 67.47 KB against 32 KB — 2.1× over.
 
 PLAN.md §20.5 point 6 asks for exactly this to be recorded rather than absorbed:
 
@@ -111,8 +114,24 @@ the specification it was costing.
 
 | | Current (§20.1) | Proposed | Measured today |
 |---|---:|---:|---:|
-| Core | ≤ 8.5 KB gzip | **≤ 30 KB gzip** | 29.65 KB |
-| Full | ≤ 32 KB gzip | **≤ 62 KB gzip** | 60.64 KB |
+| Core | ≤ 8.5 KB gzip | **≤ 30 KB gzip** | 29.87 KB |
+| Full | ≤ 32 KB gzip | **≤ 68 KB gzip** | 67.47 KB |
+
+### The full preset since
+
+The full-bundle figure moved because four subsystems the plan specifies had no
+implementation when this document was first written, and now do. None of them
+touches core:
+
+| Subsystem | Cost (full, minified) |
+|---:|---:|
+| Gestures + the pointer queue (§13.3, §13.2) | 8.36 KB |
+| The collection traits (§9) | 6.01 KB |
+| Motion (§17) | 3.96 KB |
+| Stores (§15.3) | 2.83 KB |
+
+That is the shape a preset split is supposed to have: `mutakit.hud` moved
+33.78 → 33.99 KB gzipped across all four, because a HUD uses none of them.
 
 Two things this revision is *not*. It is not a licence to grow: the proposed
 numbers sit ~1% above today's measurement, so the next kilobyte fails the
@@ -128,12 +147,12 @@ on every build and `--strict-budget` fails on it until then.
 
 | Preset | Minified | Gzipped | Contents |
 |---|---:|---:|---|
-| `mutakit.core` | 88.5 KB | 29.65 KB | §4.2's core |
-| `mutakit.hud` | 101.8 KB | 33.78 KB | core + HUD + gamepad |
-| `mutakit.dock` | 129.9 KB | 42.16 KB | core + splits + persistence |
-| `mutakit.app` | 136.1 KB | 42.34 KB | core + overlays + forms |
-| `mutakit` | 196.2 KB | 60.64 KB | everything |
+| `mutakit.core` | 89.2 KB | 29.87 KB | §4.2's core |
+| `mutakit.hud` | 102.5 KB | 33.99 KB | core + HUD + gamepad |
+| `mutakit.dock` | 139.5 KB | 45.23 KB | core + splits + persistence + stores |
+| `mutakit.app` | 149.2 KB | 46.30 KB | core + overlays + forms + motion + gestures |
+| `mutakit` | 218.3 KB | 67.47 KB | everything |
 
-The preset split does what §4.2 says it should: a HUD pays 33.78 KB rather than
-60.64 KB, and an ESM consumer bundling through their own toolchain pays for
-what they reference rather than for any of these.
+The preset split does what §4.2 says it should: a HUD pays 33.99 KB rather than
+67.47 KB — barely half — and an ESM consumer bundling through their own
+toolchain pays for what they reference rather than for any of these.

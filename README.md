@@ -27,11 +27,12 @@ centred modal in the same vocabulary.
 > **Status: 0.9.0 — M0 through M6 complete, M7 in progress.** All three driving
 > scenarios work: recursive splits with persistence (S1), the overlay and form
 > catalog (S2), and the HUD family at frame rate (S3). 50 element types, seven
-> layout algorithms, eight traits, five presets. 88 browser tests, 88 unit
-> tests, zero axe-core violations, and every performance budget met.
+> layout algorithms, thirteen traits, nine gesture recognizers, five presets.
+> 110 browser tests, 128 unit tests, zero axe-core violations, and every
+> performance budget met.
 >
-> **1.0 is gated on one item**: the size budget (§20.1). Core measures 29.65 KB
-> gzipped against 8.5 KB, and the full preset 60.64 KB against 32 KB. The
+> **1.0 is gated on one item**: the size budget (§20.1). Core measures 29.87 KB
+> gzipped against 8.5 KB, and the full preset 67.47 KB against 32 KB. The
 > per-module accounting is in
 > [`docs/size-accounting.md`](docs/size-accounting.md), which finds that the
 > estimate has no row for the four largest modules in the engine and proposes
