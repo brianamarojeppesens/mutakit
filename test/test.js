@@ -413,6 +413,43 @@ describe("layout: stack (§7.2)", () => {
 });
 
 describe("the frame loop (§6.3)", () => {
+  test("reading resolved geometry during WRITE throws (P4)", (t) => {
+    const { mk, app } = fixture(t);
+    const pane = app.create("pane", { id: "p4-read", size: { w: 50, h: 50 } });
+    mk.tick();
+
+    // §6.3 is explicit that this throws in the development build, and the
+    // reason is the sentence after it: the two reentrancy rules together make
+    // layout thrash *structurally impossible* rather than merely discouraged.
+    // It warned — so the read still returned, the reflow still happened, and
+    // the only cost was a console line nobody reads during a drag.
+    let caught = null;
+    const stop = mk.scheduler.on("write", () => {
+      try { pane.rect(); } catch (error) { caught = error; }
+    });
+    t.cleanup(stop);
+    mk.byId("p4-read").set({ size: { w: 60, h: 60 } });
+    mk.tick();
+
+    t.ok(caught, "the read throws rather than returning a value");
+    t.equal(caught.code, "MK3015");
+    t.ok(/ARRANGE or PAINT/.test(caught.message), "and says where the read belongs");
+  });
+
+  test("reading outside WRITE is unaffected", (t) => {
+    const { mk, app } = fixture(t);
+    const pane = app.create("pane", { id: "p4-ok", size: { w: 50, h: 50 } });
+    mk.tick();
+    t.deepEqual(pane.rect(), { x: 0, y: 0, w: 50, h: 50 }, "IDLE reads are the normal case");
+
+    let inArrange = null;
+    const stop = mk.scheduler.on("arrange", () => { inArrange = pane.rect(); });
+    t.cleanup(stop);
+    mk.byId("p4-ok").set({ size: { w: 70, h: 70 } });
+    mk.tick();
+    t.ok(inArrange, "and ARRANGE is where a layout-time read is supposed to happen");
+  });
+
   test("the loop unschedules itself when nothing is dirty (phase 7)", (t) => {
     const { mk, app } = fixture(t);
     app.create("pane", { size: { w: 10, h: 10 } });

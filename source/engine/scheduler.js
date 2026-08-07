@@ -12,7 +12,7 @@
  * invalidation.
  */
 import "../core/dev.js";
-import { warn } from "../core/diagnostics.js";
+import { fail, warn } from "../core/diagnostics.js";
 import { caf, now, onVisibilityChange, raf } from "../core/dom.js";
 import { flushEffects, hasPendingEffects, setEffectScheduler } from "../core/signals.js";
 
@@ -192,7 +192,15 @@ export class Scheduler {
   assertReadable(subject) {
     if (!__MK_DEV__) return true;
     if (this.phase === "write") {
-      warn("MK3015", __MK_DEV__ &&
+      // `fail`, not `warn`. §6.3 says this throws in the development build,
+      // and the distinction it draws is the point of the rule: the two
+      // reentrancy rules together make layout thrash *structurally
+      // impossible* rather than merely discouraged. A warning is merely
+      // discouraged — the read still returns a value, the reflow still
+      // happens, and the only cost is a line in a console nobody is reading
+      // during a drag. Throwing degrades to that warning in production (P7),
+      // so the documented fallback still runs where it matters.
+      fail("MK3015", __MK_DEV__ &&
         "resolved geometry was read during the WRITE phase. Move the read into " +
           "ARRANGE or PAINT — reading here forces a reflow (P4).",
         { subject: subject || this.subject }
