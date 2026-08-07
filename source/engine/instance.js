@@ -1182,6 +1182,34 @@ export class MutakitInstance extends Kernel {
     const nodes = [];
     for (const root of this.roots) root.walk((node) => nodes.push(node));
     this.measurer.read(nodes, (node) => makeContext(node));
+    this._readBack(nodes);
+  }
+
+  /**
+   * Record boxes the engine does not compute (§7.6).
+   *
+   * `flow` hands its children to normal document flow and works out nothing
+   * itself, so their `computed` rects stayed at zero — and `computed` is what
+   * `handle.rect()` returns, what hit-testing uses, and what §23.2's layout
+   * snapshot serializes. A tree with prose in it dumped a subtree of zeroes
+   * and the flagship regression technique quietly said nothing about it.
+   *
+   * §7.5 already states the intent for `grid`: the browser resolves the boxes,
+   * and ARRANGE records the same numbers so snapshots and hit tests have them.
+   * `grid` can derive them arithmetically; `flow` cannot — text wrapping is not
+   * something to reimplement — so it reads them. Here, in READ, which is the
+   * phase where reading is legal (P4).
+   */
+  _readBack(nodes) {
+    for (const node of nodes) {
+      const parent = node.parent;
+      if (!node.el || !parent || parent.algorithm !== "flow") continue;
+      const box = dom.offsetBox(node.el);
+      node.computed.x = box.x;
+      node.computed.y = box.y;
+      node.computed.w = box.w;
+      node.computed.h = box.h;
+    }
   }
 
   _arrange() {

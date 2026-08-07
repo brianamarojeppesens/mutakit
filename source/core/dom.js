@@ -309,6 +309,17 @@ export function rectOf(node) {
   return { x: r.left, y: r.top, w: r.width, h: r.height };
 }
 
+/**
+ * The offset box — position within the offset parent, and border-box size.
+ *
+ * Cheaper than `getBoundingClientRect` and, unlike it, already relative to the
+ * containing block, which is the space a node's `computed` rect is expressed
+ * in. Used to record boxes CSS decided and the engine did not (§7.6).
+ */
+export function offsetBox(node) {
+  return { x: node.offsetLeft, y: node.offsetTop, w: node.offsetWidth, h: node.offsetHeight };
+}
+
 export function computedStyle(node) {
   return window.getComputedStyle(node);
 }
