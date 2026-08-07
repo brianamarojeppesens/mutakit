@@ -978,6 +978,151 @@ describe("overlays (§11.2, §16)", () => {
     t.equal(menu.node.destroyed, true);
   });
 
+  test("a separator does not shift which item Enter selects", async (t) => {
+    const { mk, app } = fixture(t);
+    const chosen = [];
+    // The roving index counts buttons; `items` counts separators too. Selecting
+    // by the button index reads the separator where "Paste" should be — silent,
+    // because a separator is skipped rather than reported.
+    const menu = app.create("menu", {
+      id: "sep",
+      reference: { x: 40, y: 40 },
+      items: [{ label: "Cut" }, { separator: true }, { label: "Paste" }]
+    });
+    menu.on("select", (event) => chosen.push(event.detail.item.label));
+    mk.tick();
+    key(menu.el, "End");
+    key(menu.el, "Enter");
+    t.deepEqual(chosen, ["Paste"], "the last button is the last item, not the separator");
+    await mk.flush({ animations: false });
+  });
+
+  test("submenus open on ArrowRight and the whole chain closes on select (§11.2)", async (t) => {
+    const { mk, app } = fixture(t);
+    const chosen = [];
+    const menu = app.create("menu", {
+      id: "root-menu",
+      reference: { x: 100, y: 100 },
+      items: [
+        { label: "New" },
+        {
+          label: "Open recent",
+          items: [{ label: "a.js" }, { label: "b.js" }]
+        }
+      ]
+    });
+    mk.tick();
+
+    const parentItem = menu.el.querySelectorAll(".mk-menu__item")[1];
+    t.equal(parentItem.getAttribute("aria-haspopup"), "menu");
+    t.equal(parentItem.getAttribute("aria-expanded"), "false", "closed until it is opened");
+
+    key(menu.el, "ArrowDown");
+    key(menu.el, "ArrowRight");
+    mk.tick();
+    t.equal(parentItem.getAttribute("aria-expanded"), "true");
+
+    const submenu = [...document.querySelectorAll('[role="menu"]')].find((el) => el !== menu.el);
+    t.ok(submenu, "the submenu is a menu, not a special case of one");
+    const subItems = submenu.querySelectorAll(".mk-menu__item");
+    t.equal(subItems[0].getAttribute("tabindex"), "0", "ArrowRight moves focus into it");
+
+    // ArrowLeft returns to the item that opened it — not to the top of the list.
+    key(submenu, "ArrowLeft");
+    mk.tick();
+    t.equal(parentItem.getAttribute("aria-expanded"), "false");
+    t.equal(parentItem.getAttribute("data-mk-active"), "", "focus lands back on the opener");
+
+    key(menu.el, "ArrowRight");
+    mk.tick();
+    const reopened = [...document.querySelectorAll('[role="menu"]')].find((el) => el !== menu.el);
+    mk.byId("root-menu").on("select", (event) => chosen.push(event.detail.item.label));
+    key(reopened, "Enter");
+    await mk.flush({ animations: false });
+    mk.tick();
+    t.equal(menu.node.destroyed, true, "choosing in a submenu closes the whole chain");
+    t.equal(document.querySelectorAll('[role="menu"]').length, 0);
+  });
+
+  test("context mode opens from another corner rather than flipping (§11.2, §16.3)", (t) => {
+    const { mk, app } = fixture(t);
+    // Against the right edge, a dropdown flips to the far side of its trigger.
+    // A context menu has no trigger — only a corner — so it must open leftward
+    // from the same point instead.
+    const menu = app.create("menu", {
+      id: "corner",
+      contextMode: true,
+      reference: { x: 960, y: 40 },
+      items: [{ label: "Cut" }, { label: "Copy" }]
+    });
+    mk.tick();
+    t.equal(menu.el.getAttribute("data-mk-placement"), "bottom-end", "the other corner of the same point");
+    t.ok(menu.node.computed.x < 960, "and the box grows leftward");
+  });
+
+  test("the context-menu trait gives right-click a keyboard equivalent (§1.5.5)", async (t) => {
+    const { mk, app, host } = fixture(t);
+    const chosen = [];
+    const pane = app.create("pane", {
+      id: "canvas",
+      size: { w: 400, h: 300 },
+      traits: ["context-menu"],
+      "context-menu": { items: [{ label: "Cut" }, { label: "Paste" }] }
+    });
+    pane.on("select", (event) => chosen.push(event.detail.item.label));
+    mk.tick();
+
+    // The point has to come from where the sandbox actually is: a `contextmenu`
+    // event carries viewport coordinates, and the harness scrolls.
+    const origin = host.getBoundingClientRect();
+    const at = { x: origin.left + 120, y: origin.top + 90 };
+    pane.el.dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: at.x, clientY: at.y })
+    );
+    mk.tick();
+    let menu = document.querySelector('[role="menu"]');
+    t.ok(menu, "right-click opens it at the pointer");
+    t.close(menu.getBoundingClientRect().left, at.x, 2,
+      "anchored to the pointer's viewport point, not to the element");
+    key(menu, "Escape");
+    await mk.flush({ animations: false });
+
+    // Shift+F10 is the documented equivalent, and it anchors to the element —
+    // a menu at the last mouse position is disorienting to someone who never
+    // used one.
+    key(pane.el, "F10", { shiftKey: true });
+    mk.tick();
+    menu = document.querySelector('[role="menu"]');
+    t.ok(menu, "Shift+F10 opens the same menu");
+    key(menu, "Enter");
+    await mk.flush({ animations: false });
+    t.deepEqual(chosen, ["Cut"], "and selection is re-emitted on the host element");
+  });
+
+  test("a frame armed before the tab hides is late, not lost (§6.3)", async (t) => {
+    const { mk, app } = fixture(t);
+    app.create("pane", { id: "hidden-pane", size: { w: 10, h: 10 } });
+
+    // A hidden document delivers no animation frames at all, so a frame armed
+    // just before the switch never runs — and `await mk.flush()` in a tab the
+    // user switched away from waits forever on work that is already finished.
+    const original = Object.getOwnPropertyDescriptor(Document.prototype, "visibilityState");
+    Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+    t.cleanup(() => {
+      delete document.visibilityState;
+      if (original) Object.defineProperty(Document.prototype, "visibilityState", original);
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+
+    mk.byId("hidden-pane").set({ size: { w: 20, h: 20 } });
+    const settled = await Promise.race([
+      mk.flush({ animations: false }).then(() => "settled"),
+      new Promise((resolve) => setTimeout(() => resolve("hung"), 1000))
+    ]);
+    t.equal(settled, "settled", "the timer fallback runs the frame the tab would not");
+    t.equal(mk.byId("hidden-pane").node.computed.w, 20, "and the pending work actually happened");
+  });
+
   test("a toast announces through the shared live region and expires", (t) => {
     const { mk, app } = fixture(t);
     const toast = app.create("toast", { id: "saved", text: "Layout saved", ttl: 0 });

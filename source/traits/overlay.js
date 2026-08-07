@@ -149,6 +149,7 @@ export const positioned = {
       size: !!opts.size,
       arrow: opts.arrow || null,
       hide: opts.hide !== false,
+      corners: !!opts.corners,
       padding: opts.padding == null ? 8 : opts.padding
     };
 
@@ -200,16 +201,45 @@ function referenceElement(reference) {
   return null;
 }
 
-/** The reference rect, in the frame space the overlay is placed in. */
+/** The parent's origin in viewport coordinates — the frame space's `(0, 0)`. */
+function frameOrigin(ctx) {
+  const parent = ctx.node.parent;
+  return parent && parent.el ? dom.rectOf(parent.el) : { x: 0, y: 0 };
+}
+
+/**
+ * The reference rect, in the frame space the overlay is placed in.
+ *
+ * §16.3 calls a static reference "a Rect **in a named coordinate space**", and
+ * the space is what makes it usable: a `contextmenu` event carries viewport
+ * coordinates, the overlay is placed in its parent's frame, and the two agree
+ * only when the parent happens to start at the top-left of the window. Left
+ * implicit, that is a bug you see rather than one you catch — the menu opens,
+ * just not where the cursor is.
+ */
 function referenceRect(ctx, reference) {
   if (typeof reference === "function") return reference();
   const el = referenceElement(reference);
   if (el) {
     const box = dom.rectOf(el);
-    const host = ctx.node.parent && ctx.node.parent.el ? dom.rectOf(ctx.node.parent.el) : { x: 0, y: 0 };
+    const host = frameOrigin(ctx);
     return { x: box.x - host.x, y: box.y - host.y, w: box.w, h: box.h };
   }
-  if (reference && typeof reference.x === "number") return reference;
+  // A point is a rect. Requiring `w: 0, h: 0` at every call site is the kind of
+  // ceremony §16.3's "static Rect" wording does not ask for, and forgetting it
+  // produces `NaN` coordinates rather than an error.
+  if (reference && typeof reference.x === "number") {
+    // `frame` is the default because that is the space the overlay is placed
+    // in, so a rect with no stated space keeps meaning what it has always
+    // meant. Only a caller that says `viewport` pays for the conversion.
+    const host = reference.space === "viewport" ? frameOrigin(ctx) : { x: 0, y: 0 };
+    return {
+      x: reference.x - host.x,
+      y: reference.y - host.y,
+      w: reference.w || 0,
+      h: reference.h || 0
+    };
+  }
   return null;
 }
 
@@ -234,11 +264,21 @@ function place(ctx, state) {
   let box = anchorTo(reference, size, placement, state.offset);
 
   if (state.flip && !R.containsRect(inset(bounds, state.padding), box)) {
-    const flipped = opposite(placement);
-    const candidate = anchorTo(reference, size, flipped, state.offset);
-    if (fits(candidate, bounds, state.padding) > fits(box, bounds, state.padding)) {
-      placement = flipped;
-      box = candidate;
+    // `corners` is the context-menu response: with a zero-size reference there
+    // is no trigger to stay attached to, so the right answer is to open from a
+    // different corner of the same point rather than to jump to its far side.
+    // Ordinary flip keeps the surface tied to its trigger, which is the right
+    // answer for everything that has one.
+    const candidates = state.corners ? corners(placement) : [opposite(placement)];
+    let best = fits(box, bounds, state.padding);
+    for (const next of candidates) {
+      const candidate = anchorTo(reference, size, next, state.offset);
+      const score = fits(candidate, bounds, state.padding);
+      if (score > best) {
+        best = score;
+        placement = next;
+        box = candidate;
+      }
     }
   }
 
@@ -306,6 +346,21 @@ function opposite(placement) {
   const [side, align] = String(placement).split("-");
   const flipped = { top: "bottom", bottom: "top", left: "right", right: "left" }[side] || side;
   return align ? `${flipped}-${align}` : flipped;
+}
+
+/**
+ * The other three corners of a point, best-first.
+ *
+ * `bottom-start` → `bottom-end`, `top-start`, `top-end`: swap the alignment
+ * before the side, because a menu that has run out of room to the right is
+ * still better placed below the cursor than above it.
+ */
+function corners(placement) {
+  const [side, align] = String(placement).split("-");
+  if (align !== "start" && align !== "end") return [opposite(placement)];
+  const otherAlign = align === "start" ? "end" : "start";
+  const otherSide = { top: "bottom", bottom: "top", left: "right", right: "left" }[side] || side;
+  return [`${side}-${otherAlign}`, `${otherSide}-${align}`, `${otherSide}-${otherAlign}`];
 }
 
 function axisOf(placement) {

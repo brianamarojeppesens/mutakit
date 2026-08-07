@@ -65,7 +65,6 @@ function openSettings() {
 
 // A command palette on Mod+K, and a context menu anywhere in the workspace.
 const workspace = Mutakit.byId("workspace");
-workspace.create("pane", { content: "Right-click me. Press Ctrl+K.", at: "center" });
 
 Mutakit.default.service("shortcuts").bind("Mod+K", () => {
   const palette = Mutakit.create("modal", {
@@ -83,17 +82,15 @@ Mutakit.default.service("shortcuts").bind("Mod+K", () => {
   });
 }, { description: "Command palette" });
 
-workspace.el.addEventListener("contextmenu", (event) => {
-  event.preventDefault();
-  Mutakit.create("menu", {
-    reference: { x: event.clientX, y: event.clientY, w: 0, h: 0 },
-    items: [
-      { label: "Cut", shortcut: "Ctrl+X" },
-      { label: "Copy", shortcut: "Ctrl+C" },
-      { separator: true },
-      { label: "Paste", disabled: true }
-    ]
-  });
+workspace.create("pane", {
+  content: "Right-click me. Press Ctrl+K.", at: "center",
+  traits: ["context-menu"],
+  "context-menu": { items: [
+    { label: "Cut", shortcut: "Ctrl+X" },
+    { label: "Copy", shortcut: "Ctrl+C" },
+    { separator: true },
+    { label: "Paste", items: [{ label: "Plain text" }, { label: "Match style" }] }
+  ] }
 });
 </script>
 </body>

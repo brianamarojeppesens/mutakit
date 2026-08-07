@@ -54,7 +54,8 @@ export const popover = {
         offset: ctx.props.offset,
         arrow: ctx.props.arrow,
         flip: ctx.props.flip,
-        shift: ctx.props.shift
+        shift: ctx.props.shift,
+        corners: !!ctx.props.contextMode
       },
       dismissible: { policy: ctx.props.dismiss }
     };
@@ -237,7 +238,18 @@ export const menu = {
   props: {
     items: { type: "array", default: () => [] },
     placement: { type: "string", default: "bottom-start" },
-    contextMode: { type: "boolean", default: false }
+    /**
+     * Context mode: anchored to a point rather than to a trigger.
+     *
+     * The difference that earns the prop is the collision response. A dropdown
+     * that will not fit below its button *flips* to above it, because it must
+     * stay attached to that button. A context menu has no button — it has a
+     * corner at the cursor — so when it will not fit it should open from the
+     * other corner instead, which is what every desktop does and what a flip
+     * alone does not produce.
+     */
+    contextMode: { type: "boolean", default: false },
+    autoFocus: { type: "boolean", default: true }
   },
 
   events: ["select", "open", "close"],
@@ -248,11 +260,18 @@ export const menu = {
     select(ctx, index) {
       const item = ctx.props.items[index];
       if (!item || item.disabled || item.separator) return;
+      // A parent item is not a command. Selecting it opens its submenu, which
+      // is what both the pointer and `ArrowRight` mean by "activate" here.
+      if (item.items) return openSubmenu(ctx, index, true);
       ctx.emit("select", { item, index });
-      if (!item.items) {
-        const trait = ctx.trait("dismissible");
-        if (trait) trait.dismiss("select");
-      }
+      // The whole chain closes, not just the submenu the item lives in — a
+      // context menu that leaves its parent standing after a choice is the
+      // single most common way this goes wrong.
+      dismissChain(ctx, "select");
+    },
+    /** Close this menu and every menu it opened. */
+    closeChain(ctx) {
+      dismissChain(ctx, "command");
     }
   },
 
@@ -260,6 +279,7 @@ export const menu = {
     const el = inherited;
     ctx.state.active = -1;
     ctx.state.buttons = [];
+    ctx.state.submenu = null;
 
     ctx.props.items.forEach((item, index) => {
       if (item.separator) {
@@ -273,22 +293,36 @@ export const menu = {
         "aria-disabled": item.disabled ? "true" : null,
         "aria-checked": item.checked === undefined ? null : String(!!item.checked),
         "aria-haspopup": item.items ? "menu" : null,
+        "aria-expanded": item.items ? "false" : null,
         text: item.label
       }, el);
       if (item.shortcut) {
         button.appendChild(dom.el("kbd", { class: "mk-menu__shortcut", text: item.shortcut }));
       }
+      if (item.items) {
+        button.appendChild(dom.el("span", { class: "mk-menu__caret", "aria-hidden": "true", text: "›" }));
+      }
       ctx.state.buttons.push(button);
       ctx.own(dom.listen(button, "click", () => ctx.node.definition.commands.select(ctx, index)));
-      ctx.own(dom.listen(button, "pointerenter", () => focusItem(ctx, index)));
+      ctx.own(
+        dom.listen(button, "pointerenter", () => {
+          focusItem(ctx, index);
+          // Hovering a sibling closes whatever the last one opened; hovering a
+          // parent opens its own. Focus stays here either way — moving it into
+          // the submenu on hover fights the pointer.
+          if (item.items) openSubmenu(ctx, index, false);
+          else closeSubmenu(ctx);
+        })
+      );
     });
 
     ctx.own(dom.listen(el, "keydown", (event) => onMenuKey(ctx, event)));
+    ctx.own(() => closeSubmenu(ctx));
     return el;
   },
 
   mount(ctx) {
-    if (ctx.state.buttons.length) focusItem(ctx, 0);
+    if (ctx.props.autoFocus && ctx.state.buttons.length) focusItem(ctx, 0);
   },
 
   styles: css`
@@ -313,6 +347,7 @@ export const menu = {
       background: var(--mk-border-subtle);
     }
     .mk-menu__shortcut { color: var(--mk-text-secondary); font-size: var(--mk-text-sm); }
+    .mk-menu__caret { color: var(--mk-text-secondary); margin-inline-start: auto; }
   `
 };
 
@@ -328,6 +363,84 @@ function focusItem(ctx, index) {
   buttons[next].focus();
 }
 
+/**
+ * Open the submenu for `index`, as its own `menu` anchored to the parent item.
+ *
+ * A submenu is a menu, not a special case of one: it gets the same keyboard
+ * model, the same dismissal, the same placement machinery. The only things it
+ * inherits explicitly are the chain link back to its opener and the side it
+ * opens on — `right-start`, which `flip` turns into `left-start` when the
+ * screen runs out, exactly as it would for any other anchored surface.
+ */
+function openSubmenu(ctx, index, focus) {
+  const item = ctx.props.items[index];
+  const open = ctx.state.submenu;
+  if (open && open.index === index) {
+    if (focus) focusItem(ctx.mk.contextFor(open.handle.node), 0);
+    return;
+  }
+  closeSubmenu(ctx);
+  if (!item || !item.items || !item.items.length) return;
+
+  const button = ctx.state.buttons[buttonIndex(ctx, index)];
+  const handle = ctx.mk.create(
+    "menu",
+    {
+      items: item.items,
+      reference: button,
+      placement: "right-start",
+      offset: 0,
+      contextMode: ctx.props.contextMode,
+      // Opening on hover must not steal focus — the pointer is already the
+      // thing pointing. Opening on ArrowRight must, because there is nothing
+      // else for the keyboard to follow.
+      autoFocus: focus,
+      // Dismissal is the chain's, not the submenu's: an outside click closes
+      // everything, and a click on the parent menu is not "outside" the
+      // submenu even though it lands on a different element.
+      dismiss: "none"
+    },
+    ctx.node.parent || ctx.node
+  );
+  if (!handle) return;
+
+  handle.node.state.menuParent = ctx.node;
+  ctx.state.submenu = { index, handle };
+  if (button) button.setAttribute("aria-expanded", "true");
+}
+
+function closeSubmenu(ctx) {
+  const open = ctx.state.submenu;
+  if (!open) return;
+  ctx.state.submenu = null;
+  const button = ctx.state.buttons[buttonIndex(ctx, open.index)];
+  if (button) button.setAttribute("aria-expanded", "false");
+  if (!open.handle.node.destroyed) ctx.mk.destroy(open.handle.node);
+}
+
+/** Separators take a slot in `items` but not in `buttons`. */
+function buttonIndex(ctx, index) {
+  let count = 0;
+  for (let i = 0; i < index; i++) if (!ctx.props.items[i].separator) count++;
+  return count;
+}
+
+/**
+ * Dismiss the whole chain from the root down.
+ *
+ * Only the root carries a `dismissible` trait worth invoking — the submenus
+ * were created with `dismiss: 'none'` precisely so that closing one of them
+ * cannot leave the rest orphaned.
+ */
+function dismissChain(ctx, reason) {
+  let node = ctx.node;
+  while (node.state.menuParent && !node.state.menuParent.destroyed) node = node.state.menuParent;
+  const root = node === ctx.node ? ctx : ctx.mk.contextFor(node);
+  const trait = root.trait("dismissible");
+  if (trait) trait.dismiss(reason);
+  else ctx.mk.destroy(node);
+}
+
 function onMenuKey(ctx, event) {
   const count = ctx.state.buttons.length;
   if (!count) return;
@@ -336,10 +449,120 @@ function onMenuKey(ctx, event) {
   else if (key === "ArrowUp") focusItem(ctx, ctx.state.active - 1);
   else if (key === "Home") focusItem(ctx, 0);
   else if (key === "End") focusItem(ctx, count - 1);
-  else if (key === "Enter" || key === " ") ctx.node.definition.commands.select(ctx, ctx.state.active);
-  else return;
+  else if (key === "ArrowRight") openSubmenu(ctx, itemIndex(ctx, ctx.state.active), true);
+  else if (key === "ArrowLeft") closeToParent(ctx);
+  else if (key === "Escape" && ctx.node.state.menuParent) closeToParent(ctx);
+  else if (key === "Enter" || key === " ") {
+    ctx.node.definition.commands.select(ctx, itemIndex(ctx, ctx.state.active));
+  } else return;
   event.preventDefault();
+  // A submenu's keys are its own. Without this the parent menu sees the same
+  // ArrowDown and both menus move their selection on one press.
+  event.stopPropagation();
 }
+
+/** The inverse of `buttonIndex` — which item a focused button belongs to. */
+function itemIndex(ctx, button) {
+  let count = -1;
+  for (let i = 0; i < ctx.props.items.length; i++) {
+    if (ctx.props.items[i].separator) continue;
+    if (++count === button) return i;
+  }
+  return -1;
+}
+
+/** `ArrowLeft` in a submenu returns to the item that opened it. */
+function closeToParent(ctx) {
+  const parent = ctx.node.state.menuParent;
+  if (!parent || parent.destroyed) return;
+  const parentCtx = ctx.mk.contextFor(parent);
+  const open = parentCtx.state.submenu;
+  const index = open ? open.index : -1;
+  closeSubmenu(parentCtx);
+  // Focus has to land back on the item that opened it, not merely somewhere in
+  // the parent: returning to the top of the list loses the user's place.
+  if (index !== -1) focusItem(parentCtx, buttonIndex(parentCtx, index));
+}
+
+/**
+ * `context-menu` — the trait that puts §11.2's context mode behind a prop.
+ *
+ * Without it a context menu costs an author a raw `contextmenu` listener, a
+ * `preventDefault`, a hand-built point rect, and — if they remember — a
+ * `Shift+F10` handler. §1.3 accepts no design that makes S2 awkward and §1.5.5
+ * requires a documented keyboard equivalent for every pointer interaction, so
+ * both belong here rather than in every application that wants a right-click.
+ *
+ * It lives beside `menu` rather than in `traits/` for the same reason
+ * `tooltip-host` does: the two are one feature, and a trait that can only ever
+ * open a `menu` has no business shipping in a bundle that has none.
+ */
+export const contextMenu = {
+  name: "context-menu",
+  version: "1.0.0",
+  events: ["contextopen", "select"],
+  /** The keyboard equivalents, declared so §14.4's audit can find them. */
+  keys: { "Shift+F10": "open", ContextMenu: "open" },
+
+  attach(ctx, options) {
+    const opts = options || {};
+    let live = null;
+
+    const items = () => (typeof opts.items === "function" ? opts.items() : opts.items || []);
+
+    const close = () => {
+      if (live && !live.node.destroyed) ctx.mk.destroy(live.node);
+      live = null;
+    };
+
+    /**
+     * `at` is a viewport point for the pointer path and `null` for the keyboard
+     * path, where the right anchor is the element itself — a menu that opens at
+     * the last mouse position is disorienting to someone who never used one.
+     */
+    const open = (at) => {
+      const list = items();
+      if (!list.length) return null;
+      close();
+      live = ctx.mk.create(
+        "menu",
+        {
+          items: list,
+          contextMode: true,
+          placement: "bottom-start",
+          offset: at ? 0 : 4,
+          reference: at || ctx.el,
+          dismiss: "light"
+        },
+        ctx.node.parent || ctx.node
+      );
+      if (!live) return null;
+      // Re-emitted on the *host*, so an author listens on the element they put
+      // the trait on rather than on a menu they never created.
+      live.on("select", (event) => ctx.emit("select", event.detail));
+      ctx.own(close);
+      ctx.emit("contextopen", { items: list, at: at || null });
+      return live;
+    };
+
+    ctx.own(
+      dom.listen(ctx.el, "contextmenu", (event) => {
+        if (!items().length) return;
+        event.preventDefault();
+        open({ x: event.clientX, y: event.clientY, space: "viewport" });
+      })
+    );
+    ctx.own(
+      dom.listen(ctx.el, "keydown", (event) => {
+        if (event.key !== "ContextMenu" && !(event.key === "F10" && event.shiftKey)) return;
+        event.preventDefault();
+        open(null);
+      })
+    );
+
+    return { open, close, get visible() { return !!live; } };
+  }
+};
 
 /**
  * `toast` — a transient message in a managed stack, with a live region.

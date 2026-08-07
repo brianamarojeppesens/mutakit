@@ -11,7 +11,7 @@ import { registerService } from "../engine/instance.js";
 import { FocusService, AnnouncerService } from "../services/focus.js";
 import { dismissible, focusTrap, positioned } from "../traits/overlay.js";
 import { OVERLAY_ELEMENTS } from "../elements/surfaces/overlays.js";
-import { POPOVER_ELEMENTS, tooltipHost } from "../elements/surfaces/popovers.js";
+import { POPOVER_ELEMENTS, tooltipHost, contextMenu } from "../elements/surfaces/popovers.js";
 import { ShortcutService } from "../services/shortcuts.js";
 import { MotionService } from "../services/motion.js";
 import { GestureService } from "../services/gestures.js";
@@ -26,6 +26,7 @@ export function installOverlays(mk) {
   mk.trait(focusTrap, { replace: true });
   mk.trait(positioned, { replace: true });
   mk.trait(tooltipHost, { replace: true });
+  mk.trait(contextMenu, { replace: true });
   for (const definition of [
     ...OVERLAY_ELEMENTS,
     ...POPOVER_ELEMENTS,
