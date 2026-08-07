@@ -117,6 +117,10 @@ export const Mutakit = {
   serializer: (migration, options) => kernel().serializer(migration, options),
   /** A custom prop type for schemas — §10's eleventh extension point. */
   validator: (name, check, options) => kernel().validator(name, check, options),
+  /** A number, date, or message formatter used by built-ins — §10.13. */
+  formatter: (name, fn, options) => kernel().formatter(name, fn, options),
+  /** A devtools panel — §10.12. */
+  panel: (name, definition, options) => kernel().panel(name, definition, options),
 
   /**
    * Install a plugin into every instance this namespace makes (§8.5).

@@ -154,7 +154,11 @@ export const progress = {
       "aria-valuenow": (ctx) =>
         ctx.props.indeterminate || ctx.props.value == null
           ? null
-          : Math.round(ctx.props.value * 100)
+          : Math.round(ctx.props.value * 100),
+      "aria-valuetext": (ctx) =>
+        ctx.props.indeterminate || ctx.props.value == null
+          ? null
+          : ctx.mk.formatted("percent", ctx.props.value, { min: 0, max: 1 })
     }
   },
   geometry: { defaults: { size: { w: "100%", h: 6 } } },
@@ -234,7 +238,13 @@ export const meter = {
       "aria-label": (ctx) => ctx.props.label || null,
       "aria-valuenow": (ctx) => ctx.props.value,
       "aria-valuemin": (ctx) => ctx.props.min,
-      "aria-valuemax": (ctx) => ctx.props.max
+      "aria-valuemax": (ctx) => ctx.props.max,
+      // §10.13's formatters, where they earn their keep. A screen reader
+      // announcing "73%" tells a user what a bare 0.73 does not, and routing
+      // it through the registry means an application says "3 of 5" or "two
+      // thirds full" once rather than per element.
+      "aria-valuetext": (ctx) =>
+        ctx.mk.formatted("percent", ctx.props.value, { min: ctx.props.min, max: ctx.props.max })
     }
   },
   geometry: { defaults: { size: { w: 120, h: 8 } } },

@@ -24,10 +24,38 @@ import { CORE_ELEMENTS } from "../elements/structural/pane.js";
  * party uses (P3). If one of these needed something the API cannot express,
  * that would be a hole in the contract, not a reason for a back door.
  */
+/**
+ * The built-in formatters (§10.13).
+ *
+ * Thin on purpose. These exist so a built-in has something to call and an
+ * application has something to replace — `mk.formatter('number', …)` changes
+ * every meter, progress bar, and slider at once, which is the whole point of
+ * the extension point.
+ */
+const FORMATTERS = {
+  number: (value) => (typeof value === "number" ? value.toLocaleString() : String(value ?? "")),
+  percent: (value, detail) => {
+    const min = detail.min == null ? 0 : detail.min;
+    const max = detail.max == null ? 1 : detail.max;
+    const span = max - min;
+    const ratio = span ? (Number(value) - min) / span : 0;
+    return `${Math.round(ratio * 100)}%`;
+  },
+  date: (value) => {
+    const date = value instanceof Date ? value : new Date(value);
+    return isNaN(date.getTime()) ? String(value ?? "") : date.toLocaleDateString();
+  },
+  time: (value) => {
+    const date = value instanceof Date ? value : new Date(value);
+    return isNaN(date.getTime()) ? String(value ?? "") : date.toLocaleTimeString();
+  }
+};
+
 export function installCore(mk) {
   mk.layout(anchorLayout, { replace: true });
   mk.layout(stackLayout, { replace: true });
   mk.trait(focusable, { replace: true });
+  for (const name of Object.keys(FORMATTERS)) mk.formatter(name, FORMATTERS[name], { replace: true });
   for (const definition of CORE_ELEMENTS) mk.define(definition, { replace: true });
   return { uninstall() {} };
 }

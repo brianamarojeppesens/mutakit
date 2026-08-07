@@ -1136,6 +1136,56 @@ describe("extension points (§10)", () => {
     t.equal(ended, 1, "the recognizer ran and its handler fired");
   });
 
+  test("formatters are registered, used by built-ins, and replaceable (§10.13)", (t) => {
+    const { mk, app } = fixture(t);
+
+    // §10.13 had a registry kind reserved, a kernel method to fill it, and no
+    // consumer — so nothing formatted anything. `aria-valuetext` is where it
+    // earns its keep: a screen reader announcing "73%" tells a user what a
+    // bare 0.73 does not.
+    const meter = app.create("meter", { id: "fmt-m", value: 73, min: 0, max: 100, label: "Disk" });
+    const scaled = app.create("meter", { id: "fmt-s", value: 0.73, min: 0, max: 1, label: "Scaled" });
+    const progress = app.create("progress", { id: "fmt-p", value: 0.4, label: "Upload" });
+    mk.tick();
+
+    t.equal(meter.el.getAttribute("aria-valuetext"), "73%");
+    t.equal(scaled.el.getAttribute("aria-valuetext"), "73%", "whatever scale the range uses");
+    t.equal(progress.el.getAttribute("aria-valuetext"), "40%");
+    t.equal(mk.formatted("number", 1234567), (1234567).toLocaleString());
+    t.equal(mk.formatted("nope", 42), "42", "an unregistered name falls back to the value");
+
+    // Replacing one changes every consumer at once, which is the point.
+    Mutakit.formatter("percent", (value, detail) => {
+      const span = (detail.max ?? 1) - (detail.min ?? 0);
+      return `${Math.round(((value - (detail.min ?? 0)) / span) * 5)} of 5`;
+    }, { replace: true });
+    meter.set({ value: 80 });
+    progress.set({ value: 0.6 });
+    mk.tick();
+    t.equal(meter.el.getAttribute("aria-valuetext"), "4 of 5");
+    t.equal(progress.el.getAttribute("aria-valuetext"), "3 of 5", "both, from one registration");
+  });
+
+  test("a prop a type declares wins a name the engine also uses (§8.1)", (t) => {
+    const { mk, app } = fixture(t);
+
+    // `min` and `max` are geometry keys, and `meter`, `progress`, `slider`,
+    // and `number` all declare props called exactly that — so their ranges
+    // were read as size clamps and never reached the element. A meter asked
+    // for `max: 1` kept its default of 100 and reported 1% where it meant 73%.
+    const scaled = app.create("meter", { id: "shadow-m", value: 0.73, min: 0, max: 1 });
+    const slider = app.create("slider", { id: "shadow-s", min: 10, max: 20, value: 15 });
+    mk.tick();
+    t.equal(scaled.get("max"), 1, "the type's prop receives the value");
+    t.equal(slider.get("min"), 10);
+    t.equal(slider.get("max"), 20);
+
+    // And geometry keeps the name where no prop claims it.
+    const pane = app.create("pane", { id: "shadow-p", size: { w: "100%", h: 50 }, max: { w: 200 } });
+    mk.tick();
+    t.equal(pane.node.computed.w, 200, "a pane's `max` is still a size clamp");
+  });
+
   test("a registered anchor keyword and placement strategy are consulted (§10.5)", (t) => {
     const { mk, app } = fixture(t);
 

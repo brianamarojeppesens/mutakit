@@ -141,6 +141,20 @@ export class Kernel {
    * what makes `size` turn `8` into `{ w: 8, h: 8 }` — or `{ error }` to
    * reject with a message the author reads.
    */
+  /**
+   * Apply a registered formatter, falling back to the value itself.
+   *
+   * Built-ins call this rather than formatting inline, which is what makes
+   * §10.13 an extension point rather than a claim: replacing `number` changes
+   * every meter, progress bar, and slider at once.
+   */
+  formatted(name, value, detail) {
+    const record = this.registry.get("formatter", name);
+    if (!record) return value == null ? "" : String(value);
+    const out = record.format(value, detail || {});
+    return out == null ? "" : String(out);
+  }
+
   validator(name, check, options) {
     if (!name || typeof check !== "function") {
       return fail("MK3002", __MK_DEV__ &&
@@ -204,8 +218,19 @@ export class Kernel {
     return this.registry.set("panel", name, { name, ...definition }, options);
   }
 
-  /** Register a formatter (§10.13). */
+  /**
+   * Register a formatter (§10.13, §10's thirteenth extension point).
+   *
+   * Number, date, and message formatting that built-ins use, so an
+   * application decides how a value reads once rather than per element. The
+   * built-in set is deliberately thin: a locale, a currency, or a domain
+   * vocabulary — "3 of 5", "two thirds full" — is the application's to choose.
+   */
   formatter(name, fn, options) {
+    if (!name || typeof fn !== "function") {
+      return fail("MK3002", __MK_DEV__ &&
+        `formatter '${name}' needs a function`, { subject: name });
+    }
     return this.registry.set("formatter", name, { name, format: fn }, options);
   }
 
