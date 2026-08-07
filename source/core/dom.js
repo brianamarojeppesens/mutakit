@@ -152,13 +152,29 @@ export function setHTML(node, markup, sanitize, subject) {
   node.innerHTML = p ? p.createHTML(clean) : clean;
 }
 
+/**
+ * Detach a node, and account for everything that goes with it.
+ *
+ * The whole subtree, not just the node named. `el()` increments on creation
+ * and only this decrements, so a composite that built a footer of buttons and
+ * removed the footer left every button counted forever — detached and
+ * collectable, but permanently on the books. §23.5's gate is that count, so
+ * the effect was not a leak but something worse: a leak detector drifting away
+ * from the truth, one composite at a time.
+ */
 export function remove(node) {
   if (!node) return;
   if (node.parentNode) node.parentNode.removeChild(node);
-  if (node[LIVE]) {
-    node[LIVE] = false;
-    counters.elements--;
-  }
+  release(node);
+  // `querySelectorAll` only exists on elements; a text node has no subtree.
+  if (!node.querySelectorAll) return;
+  for (const descendant of node.querySelectorAll("*")) release(descendant);
+}
+
+function release(node) {
+  if (!node[LIVE]) return;
+  node[LIVE] = false;
+  counters.elements--;
 }
 
 export function insert(parent, node, before) {
@@ -225,12 +241,19 @@ export function observeMutations(target, callback, options) {
 }
 
 export function timer(fn, ms) {
+  // `live` is cleared when the timer *fires*, not only when it is cancelled.
+  // Almost every timer here is handed to `ctx.own()`, so a timer that ran to
+  // completion was then cancelled at teardown and decremented a second time —
+  // pushing `counters.timers` below its baseline and making the next thing
+  // measured look like it had leaked. A leak detector that reports the wrong
+  // subject is worse than one that reports nothing (§23.5).
+  let live = true;
   const id = setTimeout(() => {
+    live = false;
     counters.timers--;
     fn();
   }, ms);
   counters.timers++;
-  let live = true;
   return function cancel() {
     if (!live) return;
     live = false;
