@@ -790,6 +790,25 @@ describe("leaks (§23.5)", () => {
 });
 
 describe("conformance (§8.7)", () => {
+  test("a reduced variant of 'none' is a finding (§17)", (t) => {
+    // §17 states it outright: reduced does not mean *none*, because an
+    // instantaneous state change can be more disorienting than a short fade.
+    // The rule only checked for `reduced` being *absent*, so declaring it as
+    // the one value the section rules out passed — and three built-in types
+    // did exactly that.
+    const base = { type: "acme:mover", a11y: { role: "note" }, create: (ctx) => ctx.dom("div") };
+    const findings = (motion) => Mutakit.conformance({ ...base, motion }).map((f) => f.code);
+
+    t.ok(findings({ enter: "fade", exit: "fade", reduced: "none" }).includes("MK5004"),
+      "animating with reduced: 'none' is reported");
+    t.ok(findings({ enter: "fade" }).includes("MK5004"), "and so is omitting it entirely");
+    t.notOk(findings({ enter: "fade", exit: "fade", reduced: "fade" }).includes("MK5004"),
+      "a shorter animation satisfies it");
+    // An element that does not animate at all is not required to invent one.
+    t.notOk(findings({ enter: "none", exit: "none", reduced: "none" }).includes("MK5004"),
+      "and declaring no motion is not a motion problem");
+  });
+
   test("binding pointer events without keys is a finding (§1.5.5)", (t) => {
     // §1.5 states it without qualification: every pointer interaction has a
     // documented keyboard equivalent. The check only looked at a hardcoded
@@ -2382,7 +2401,10 @@ describe("motion (§17)", () => {
     mk.define({
       type: "acme:bad-motion",
       a11y: "presentation",
-      motion: { enter: { width: ["0px", "100px"], duration: 10 }, reduced: "none" },
+      // `reduced: 'fade'`, not `'none'` — this test is about animating a
+      // non-compositable property, and a fixture that also violates §17's
+      // reduced rule reports that instead, under the same code.
+      motion: { enter: { width: ["0px", "100px"], duration: 10 }, reduced: "fade" },
       create: (ctx) => ctx.dom("div")
     });
     app.create("acme:bad-motion", { size: { w: 100, h: 20 } });

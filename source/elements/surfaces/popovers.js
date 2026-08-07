@@ -41,7 +41,10 @@ export const popover = {
     }
   },
 
-  motion: { enter: "fade", exit: "fade", reduced: "none" },
+  // Not `reduced: 'none'`. §17: an instantaneous appearance is more
+  // disorienting than a short one, so the reduced path is the `fade` preset's
+  // own reduced variant — 80ms of opacity — rather than nothing at all.
+  motion: { enter: "fade", exit: "fade", reduced: "fade" },
 
   create(ctx, inherited) {
     const el = inherited || ctx.dom("div", null, null);

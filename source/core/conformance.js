@@ -114,13 +114,31 @@ export function conformance(definition, resolved) {
   // ── Motion presets must define a reduced variant (§17) ─────────────────
   if (merged.motion) {
     for (const phase of ["enter", "exit"]) {
-      if (merged.motion[phase] && merged.motion.reduced === undefined) {
+      const animates = merged.motion[phase] && merged.motion[phase] !== "none";
+      if (!animates) continue;
+      if (merged.motion.reduced === undefined) {
         findings.push(
           finding(
             "warn",
             "MK5004",
             `'${type}' declares motion.${phase} but no \`reduced\` variant; ` +
               `reduced-motion users will get the full animation.`
+          )
+        );
+        break;
+      }
+      // §17 states it outright: reduced does not mean *none*, because an
+      // instantaneous state change can be more disorienting than a short
+      // fade. Only `reduced === undefined` was checked, so declaring it as
+      // `'none'` — the one spelling the section rules out — passed.
+      if (merged.motion.reduced === "none" || merged.motion.reduced === null) {
+        findings.push(
+          finding(
+            "warn",
+            "MK5004",
+            `'${type}' animates on ${phase} but its \`reduced\` variant is 'none'; ` +
+              `§17 asks for a shorter animation, not for none — an instantaneous ` +
+              `change can be more disorienting than a 100ms fade.`
           )
         );
         break;
