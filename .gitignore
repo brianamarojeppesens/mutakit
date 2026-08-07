@@ -16,3 +16,6 @@ build/*
 # A local Node runtime copied into the repo so the sandboxed dev shell can reach
 # it. Never committed — `node` on PATH is the normal arrangement.
 .node/
+
+# The assembled Pages site; `npm run site` regenerates it.
+_site/

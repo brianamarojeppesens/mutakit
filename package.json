@@ -51,7 +51,8 @@
     "serve": "node tools/serve.mjs",
     "r1": "node tools/r1-measure.mjs",
     "test:browser:all": "MK_ENGINES=chromium,firefox,webkit node tools/serve.mjs --run",
-    "test:bench": "MK_PAGES=bench node tools/serve.mjs --run"
+    "test:bench": "MK_PAGES=bench node tools/serve.mjs --run",
+    "site": "node build.mjs && node tools/build-site.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.62.1",

@@ -1,0 +1,57 @@
+# Publish the examples, and the suite, to GitHub Pages.
+#
+# Triggered by CI *succeeding* rather than by the push itself. A demo is the
+# one artifact a stranger judges the project by, and publishing it from a red
+# build would put a broken page in front of exactly the people who have no
+# other information. The cost is that Pages lags a push by one CI run.
+name: Pages
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time, and never cancel one midway: a half-written site is
+# worse than a stale one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # workflow_dispatch has no triggering run to inspect, so allow it through.
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+
+      # The site serves raw source/ for the examples and build/ for the
+      # quick-start snippet, so the bundles have to exist before it is assembled.
+      - name: build
+        run: npm run build
+      - name: assemble _site
+        run: node tools/build-site.mjs
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v4
