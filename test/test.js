@@ -1631,6 +1631,49 @@ describe("layout: split (§7.3)", () => {
     t.ok(bottom.node.computed.h > 0, "and it comes back");
   });
 
+  test("a resized pane stays flexible, so collapsing a sibling gives it the space", (t) => {
+    const { mk, app } = fixture(t);
+    const [left, right] = app.split({
+      axis: "x",
+      gutter: { size: 6, draggable: true },
+      panes: [
+        { id: "s-left", size: 100, min: 64, max: "40%", collapsible: { at: 40, to: 0 } },
+        { id: "s-right", size: "1fr" }
+      ]
+    });
+    mk.tick();
+    const gutter = app.node.children.find((n) => n.type === "resizer");
+    const handle = mk.handleFor(gutter);
+    const full = app.node.computed.w;
+
+    t.equal(right.node.layoutProps.size, "1fr", "it starts flexible");
+
+    // Commit a drag. This used to write the flexible pane's measured pixels
+    // into its size, which made it a fixed track for good.
+    handle.nudge(60);
+    mk.tick();
+    t.equal(right.node.layoutProps.size, "1fr",
+      "and it is still flexible after a drag, not pinned to what it measured");
+
+    const widened = left.node.computed.w;
+    t.ok(widened > 100, "the fixed neighbour is the one that took the drag");
+
+    // The whole point of a flexible track: when its neighbour goes away, it
+    // absorbs the space. A pinned one leaves a gap the width of the sidebar,
+    // and every later drag re-pins it a little narrower.
+    handle.toggle();
+    mk.tick();
+    t.close(left.node.computed.w, 0, 1, "the sidebar collapsed");
+    t.close(right.node.computed.w + gutter.computed.w, full, 1.5,
+      "and the flexible pane took the freed width instead of leaving a gap");
+
+    handle.toggle();
+    mk.tick();
+    t.close(left.node.computed.w, widened, 1, "restoring brings back the same sidebar");
+    t.close(left.node.computed.w + gutter.computed.w + right.node.computed.w, full, 1.5,
+      "with the row still exactly full — no drift across the cycle");
+  });
+
   test("keyboard: arrows resize, Shift multiplies, Enter toggles (§7.3, P5)", (t) => {
     const { mk, app, left } = brief(t);
     const gutter = app.node.children.find((n) => n.type === "resizer");

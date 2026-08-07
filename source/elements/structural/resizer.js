@@ -315,10 +315,34 @@ function commit(ctx, result) {
   const axis = state ? state.axis : ctx.props.axis;
   const measured = state && state.css ? readBack(model, axis) : result.sizes;
 
+  // A flexible track stays flexible. Committing its measured pixels turned
+  // `1fr` into a fixed width, and a track that no longer flexes cannot absorb
+  // anything: collapsing the sidebar afterwards freed 180px that nothing
+  // claimed, so the layout kept its old width and left a gap. Worse, each
+  // later drag re-pinned it to the already-short width, so the panes shrank a
+  // little more every time the sidebar was collapsed and reopened.
+  //
+  // What the drag actually changed for a flexible track is its *share*, so
+  // that is what gets committed. With one flexible track the share is the
+  // whole, and `1fr` commits as `1fr` — unchanged, still absorbing. With
+  // several, the ratio between them moves, which is what the drag meant.
+  const flexible = model.tracks.filter((track, i) =>
+    track.flexible && !track.collapsed && isFinite(measured[i])
+  );
+  const flexPx = flexible.reduce((sum, track) => sum + measured[model.tracks.indexOf(track)], 0);
+  const flexFr = flexible.reduce((sum, track) => sum + (track.fr || 0), 0);
+
   model.tracks.forEach((track, i) => {
     if (track.collapsed) return;
     const size = measured[i];
     if (size == null || !isFinite(size)) return;
+    if (track.flexible) {
+      if (flexPx > 0 && flexFr > 0) {
+        const share = Math.round(((size / flexPx) * flexFr) * 1000) / 1000;
+        ctx.mk.setLayoutProps(track.pane, { size: `${share}fr` });
+      }
+      return;
+    }
     ctx.mk.setLayoutProps(track.pane, { size });
   });
 
