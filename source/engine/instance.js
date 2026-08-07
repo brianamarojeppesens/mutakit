@@ -1039,6 +1039,11 @@ export class MutakitInstance extends Kernel {
 
     for (const child of target.children) this._validateLayoutProps(child);
     invalidate(target, "arrange");
+    // An algorithm whose children are *named* rather than ordered says so, and
+    // gets the parent handle back instead of an array — `shell.region('body')`
+    // reads at the call site, where `created[2]` asks the author to know the
+    // order the implementation happened to build them in.
+    if (algorithm.returns === "self") return this.handleFor(target);
     return created.length ? created : this.handleFor(target);
   }
 

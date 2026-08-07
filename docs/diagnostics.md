@@ -115,6 +115,13 @@ every bound. CSS holds the minimums and lets the container overflow, which
 collapse a pane. Reported once per split so a resize sweep does not flood the
 console.
 
+### MK2014 — No such region
+**Cause.** `handle.region(name)` found no child matching `name` — neither by
+the region it occupies (`top`, `center`, …) nor by the id it was given (§7.4).
+Returns `null` rather than throwing, so a lookup can be tested.
+**Fix.** Use one of the names in the message. A region with no explicit `id`
+takes its region name as one, so `region('center')` works until you name it.
+
 ---
 
 ## Contract — MK3xxx

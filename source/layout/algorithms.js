@@ -22,6 +22,8 @@ import * as R from "../geometry/rect.js";
 export const dockLayout = {
   name: "dock",
   version: "1.0.0",
+  /** Regions are named, not ordered — `dock()` returns the shell (§7.4). */
+  returns: "self",
 
   schema: {
     corners: { type: "enum", values: ["horizontal", "vertical", "explicit"], default: "horizontal" },

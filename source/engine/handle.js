@@ -72,8 +72,37 @@ export class Handle {
     return this.mk.applyAlgorithm(this.node, "stack", options);
   }
 
+  /**
+   * Replace this node's algorithm with `dock` and create its regions (§7.4).
+   *
+   * Returns *this* handle rather than the regions, because dock's children are
+   * named where split's are ordered — `region('body')` says what it means at
+   * the call site, and an array would ask the author to remember the order the
+   * implementation happened to create them in.
+   */
   dock(options) {
     return this.mk.applyAlgorithm(this.node, "dock", options);
+  }
+
+  /**
+   * A named child of a docked node — `shell.region('body')` (§7.4).
+   *
+   * Either name works: the region's own (`'center'`) or the id the author gave
+   * it (`'body'`). They are the same string unless an id was supplied, since a
+   * region with no id takes its region name as one — so accepting both is not
+   * two lookups but one, spelled the way the author already thinks of it.
+   */
+  region(name) {
+    for (const child of this.node.children) {
+      const bag = child.layoutProps;
+      if (child.id === name || (bag && bag.region === name)) return this.mk.handleFor(child);
+    }
+    const known = this.node.children.map((child) => child.id).filter(Boolean).join(", ");
+    warn("MK2014", __MK_DEV__ &&
+      `no region '${name}' on '${this.node.type}' (it has ${known || "none"})`, {
+      subject: `${this.node.type}.${name}`
+    });
+    return null;
   }
 
   grid(options) {
