@@ -2313,6 +2313,31 @@ describe("ecosystem (§26 M6)", () => {
     t.ok(profile.frames > 0 && profile.averageMs >= 0);
   });
 
+  test("an author restyles from mutakit.user with no !important (§12.1)", (t) => {
+    const { mk, app } = fixture(t);
+    const surface = app.create("surface", { id: "layer-s", size: { w: 200, h: 100 } });
+    mk.tick();
+    const before = getComputedStyle(surface.el).borderRadius;
+    t.notEqual(before, "0px", "the library gives it a radius to override");
+
+    // §12.1's whole promise. The author's selector is no more specific than
+    // the library's and carries no `!important` — the layer order is what
+    // decides it.
+    //
+    // This failed until the order statement moved into the document. Adopted
+    // stylesheets sort after every document stylesheet, so an order declared
+    // only in an adopted sheet is established *after* an author's own `<style>`
+    // has been parsed, and their `@layer mutakit.user { … }` opens a layer
+    // earlier than the one it names — losing to the rules it was meant to beat.
+    const authored = document.createElement("style");
+    authored.textContent = "@layer mutakit.user { .mk-surface { border-radius: 0px; } }";
+    document.head.appendChild(authored);
+    t.cleanup(() => authored.remove());
+
+    t.equal(getComputedStyle(surface.el).borderRadius, "0px",
+      "a rule in mutakit.user wins without !important");
+  });
+
   test("a theme applies per subtree, not per page (§12.3)", (t) => {
     const { mk, app } = fixture(t);
     const theme = mk.service("theme");

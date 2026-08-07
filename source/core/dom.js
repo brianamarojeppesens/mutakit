@@ -485,7 +485,17 @@ export function injectStyle(css, options) {
   const target = root.adoptedStyleSheets !== undefined ? root : document;
   const f = detectFeatures();
 
-  if (f.constructableSheets && target.adoptedStyleSheets !== undefined) {
+  // `first` forces the `<style>` path, at the top of `<head>`.
+  //
+  // Adopted stylesheets sort *after* every document stylesheet in the author
+  // origin, so a layer order declared only in an adopted sheet is established
+  // after an author's own `<style>` has already been parsed — and their
+  // `@layer mutakit.user { … }` block therefore opens a layer in an earlier
+  // position than the one it names, losing to the library's element rules.
+  // That breaks §12.1's whole promise, which is that restyling never needs
+  // `!important`. Declaring the order in the document, before anything else,
+  // is what makes the name mean what it says.
+  if (!opts.first && f.constructableSheets && target.adoptedStyleSheets !== undefined) {
     const sheet = new CSSStyleSheet();
     sheet.replaceSync(css);
     target.adoptedStyleSheets = [...target.adoptedStyleSheets, sheet];
@@ -499,7 +509,9 @@ export function injectStyle(css, options) {
   const style = document.createElement("style");
   if (opts.nonce) style.setAttribute("nonce", opts.nonce);
   style.textContent = css;
-  (root.head || root).appendChild(style);
+  const parent = root.head || root;
+  if (opts.first) parent.insertBefore(style, parent.firstChild);
+  else parent.appendChild(style);
   counters.sheets++;
   return function removeSheet() {
     if (style.parentNode) style.parentNode.removeChild(style);

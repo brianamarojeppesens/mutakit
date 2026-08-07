@@ -24,7 +24,10 @@ export class StyleManager {
   ensureBase() {
     if (this.baseDone || !dom.isBrowser()) return;
     this.baseDone = true;
-    this._inject(LAYER_ORDER, "layers");
+    // In the document, ahead of any author sheet — see `injectStyle`. The
+    // layers themselves stay constructable; only the one-line order statement
+    // needs to be somewhere an author's own stylesheet will see it first.
+    this._inject(LAYER_ORDER, "layers", { first: true });
     this._inject(wrap("mutakit.reset", scope(RESET_CSS, this.mk.prefix)), "reset");
     this._inject(wrap("mutakit.tokens", scope(TOKENS_CSS, this.mk.prefix)), "tokens");
     this._inject(wrap("mutakit.base", scope(BASE_CSS, this.mk.prefix)), "base");
@@ -66,9 +69,9 @@ export class StyleManager {
     this._inject(wrap(layer || "mutakit.element", scope(css, this.mk.prefix)), id);
   }
 
-  _inject(css, key) {
+  _inject(css, key, options) {
     if (!dom.isBrowser()) return;
-    const remove = dom.injectStyle(css, { nonce: this.mk.options.nonce });
+    const remove = dom.injectStyle(css, { nonce: this.mk.options.nonce, ...(options || {}) });
     this.disposers.push(remove);
     return remove;
   }
