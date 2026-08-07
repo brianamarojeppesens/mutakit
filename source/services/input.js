@@ -112,6 +112,29 @@ function navigate(mk, direction) {
   if (spatial) spatial.move(direction);
 }
 
+const ARROWS = {
+  ArrowUp: "up",
+  ArrowDown: "down",
+  ArrowLeft: "left",
+  ArrowRight: "right"
+};
+
+/** Roles and elements for which an arrow key already means something. */
+const ARROW_ROLES = new Set([
+  "menu", "menubar", "menuitem", "menuitemcheckbox", "menuitemradio",
+  "listbox", "option", "combobox", "slider", "spinbutton",
+  "tablist", "tab", "tree", "treeitem", "grid", "gridcell", "radiogroup", "radio", "textbox"
+]);
+
+function consumesArrows(el) {
+  if (!el || !el.tagName) return false;
+  const tag = el.tagName.toLowerCase();
+  if (tag === "input" || tag === "textarea" || tag === "select") return true;
+  if (el.isContentEditable) return true;
+  const role = el.getAttribute && el.getAttribute("role");
+  return !!role && ARROW_ROLES.has(role);
+}
+
 /**
  * Spatial navigation (§13.6).
  *
@@ -131,10 +154,36 @@ export class SpatialService {
     this.mk = mk;
   }
 
-  /** Opt a container in. Only its descendants participate. */
+  /**
+   * Opt a container in. Only its descendants participate.
+   *
+   * §13.6 says this is "available to keyboard arrows and gamepad sticks
+   * alike", and only the gamepad source ever called `move()` — so the scoring
+   * function worked, `enable()` registered the container, and pressing an
+   * arrow key did nothing at all. The opt-in has to bind the keyboard too, or
+   * the feature exists for whoever owns a gamepad.
+   */
   enable(node) {
     this.containers.add(node);
-    return () => this.containers.delete(node);
+    const stop = node.el
+      ? dom.listen(node.el, "keydown", (event) => this._onKey(event))
+      : () => {};
+    return () => {
+      stop();
+      this.containers.delete(node);
+    };
+  }
+
+  _onKey(event) {
+    const direction = ARROWS[event.key];
+    // `defaultPrevented` means something nearer the target already claimed it.
+    if (!direction || event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+    // Arrows belong to the focused control first. A text field uses them for
+    // the caret, a menu and a listbox for their own roving selection, a slider
+    // and a spinbutton to change value — stealing those to move focus across
+    // the HUD would break every one of them (§13.4).
+    if (consumesArrows(dom.activeElement())) return;
+    if (this.move(direction)) event.preventDefault();
   }
 
   /** Every candidate rect, in viewport space. */

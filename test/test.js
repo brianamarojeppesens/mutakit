@@ -2121,6 +2121,45 @@ describe("HUD and game (§11.5, S3)", () => {
     t.ok(map.includes('"px"'), "alongside the pixels, so a missing plugin cannot collapse it");
   });
 
+  test("arrow keys drive spatial navigation, and yield to controls (§13.6)", (t) => {
+    const { mk, app } = fixture(t);
+    const hud = app.create("hud-layer", { id: "sn-hud", spatial: true, interactive: true });
+    const put = (id, left, top) => hud.create("pane", {
+      id, at: "top-left", inset: { left, top }, size: { w: 60, h: 40 }, traits: ["focusable"]
+    });
+    const centre = put("sn-c", 370, 280);
+    put("sn-up", 370, 100);
+    put("sn-down", 370, 460);
+    put("sn-left", 100, 280);
+    put("sn-right", 640, 280);
+    mk.tick();
+
+    // §13.6 says this is available to keyboard arrows *and* gamepad sticks
+    // alike. Only the gamepad source ever called `move()` — the scoring
+    // function worked, `enable()` registered the container, and pressing an
+    // arrow did nothing, so the feature existed for whoever owned a gamepad.
+    const focused = () => document.activeElement.getAttribute("data-mk-id");
+    for (const [key, expected] of [["ArrowUp", "sn-up"], ["ArrowDown", "sn-down"],
+                                   ["ArrowLeft", "sn-left"], ["ArrowRight", "sn-right"]]) {
+      centre.el.focus();
+      hud.el.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key }));
+      mk.tick();
+      t.equal(focused(), expected, `${key} moves that way`);
+    }
+
+    // Arrows belong to the focused control first. A text field uses them for
+    // the caret; stealing those to move focus across the HUD breaks it (§13.4).
+    const field = hud.create("text", { id: "sn-input", name: "n" });
+    mk.tick();
+    const input = field.el.querySelector("input");
+    input.focus();
+    const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "ArrowLeft" });
+    input.dispatchEvent(event);
+    mk.tick();
+    t.equal(document.activeElement, input, "focus stays in the field");
+    t.notOk(event.defaultPrevented, "and the key is left for it to use");
+  });
+
   test("spatial navigation prefers alignment over raw distance (§13.6)", (t) => {
     const { mk } = fixture(t);
     const from = { x: 0, y: 100, w: 50, h: 50 };
