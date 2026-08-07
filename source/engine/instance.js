@@ -42,6 +42,9 @@ const GEOMETRY_KEYS = new Set([
   "insets", "keepWithin", "positioning", "scrollWith", "priority", "z"
 ]);
 
+/** Structural keys that are also raw DOM sinks — never restored under `schema`. */
+const RAW_DOM_KEYS = new Set(["class", "style"]);
+
 const STRUCTURAL_KEYS = new Set([
   "id", "key", "traits", "algorithm", "content", "slots", "children", "on", "command",
   "class", "style", "hidden", "a11y", "layer", "layout", "measureSync"
@@ -807,6 +810,19 @@ export class MutakitInstance extends Kernel {
   filterToSchema(props, definition) {
     const out = {};
     for (const key of Object.keys(props)) {
+      if (RAW_DOM_KEYS.has(key)) {
+        // Structural, but also the only two structural keys that write
+        // straight to the DOM. §21.4 asks `props: 'schema'` to reject anything
+        // the type does not declare precisely because props reach DOM sinks,
+        // and a restored node free to set its own `style` can be positioned
+        // over the UI it was restored into. Neither is needed to rebuild a
+        // layout: geometry is, and geometry is kept.
+        warn("MK4015", __MK_DEV__ &&
+          `restore dropped '${key}': presentation is not restorable under \`props: 'schema'\``, {
+          subject: `${definition.type}.${key}`
+        });
+        continue;
+      }
       if (GEOMETRY_KEYS.has(key) || STRUCTURAL_KEYS.has(key) || key in definition.props) {
         out[key] = props[key];
       } else {

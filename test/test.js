@@ -537,6 +537,83 @@ describe("persistence (§19)", () => {
     t.equal(second.mk.byId("s-tree").el.textContent, "files", "and its text came with it");
   });
 
+  test("restore is default-strict, and `props: 'schema'` keeps DOM sinks out (§21.4)", (t) => {
+    const { mk } = fixture(t);
+    const codes = [];
+    Mutakit.diagnostics.reset();
+    Mutakit.diagnostics.sink((record) => codes.push(record.code));
+    t.cleanup(() => Mutakit.diagnostics.sink(null));
+
+    // §21.4: an unrestricted restore emits MK4xxx unless `allow: 'any'` is
+    // passed deliberately. Restoring attacker-controlled JSON is roughly as
+    // dangerous as running attacker-controlled code, so silence is the wrong
+    // default.
+    mk.restore({ schema: 1, mutakit: "0.9.0", frame: { algorithm: "anchor" },
+      tree: [{ type: "pane", id: "sec-a" }] });
+    t.ok(codes.includes("MK4015"), "an unrestricted restore says so");
+
+    codes.length = 0;
+    Mutakit.diagnostics.reset();
+    mk.restore({ schema: 1, mutakit: "0.9.0", frame: { algorithm: "anchor" },
+      tree: [{ type: "pane", id: "sec-b" }] }, { allow: "any" });
+    t.notOk(codes.includes("MK4015"), "and opting out deliberately is silent");
+
+    // The allow-list filters types, and `props: 'schema'` filters what reaches
+    // the DOM. `class` and `style` are structural but are also the two keys
+    // that write straight to it — a restored node free to set its own `style`
+    // can be positioned over the UI it was restored into.
+    mk.restore(
+      { schema: 1, mutakit: "0.9.0", frame: { algorithm: "anchor" },
+        tree: [
+          { type: "pane", id: "sec-ok", size: { w: 40, h: 20 }, class: "evil",
+            style: { background: "red" }, onclick: "alert(1)" },
+          { type: "modal", id: "sec-no", title: "not allowed" }
+        ] },
+      { allow: { types: ["pane"], props: "schema" } }
+    );
+    mk.tick();
+
+    const pane = mk.byId("sec-ok");
+    t.ok(pane, "an allowed type is restored");
+    t.equal(mk.byId("sec-no"), null, "a type outside the allow-list is not");
+    t.notOk(pane.el.classList.contains("evil"), "class does not survive");
+    t.equal(pane.el.style.background, "", "nor does style");
+    t.notOk(pane.el.hasAttribute("onclick"), "and an inline handler never lands");
+    t.deepEqual(rect(pane), [0, 0, 40, 20], "while the geometry it exists to carry does");
+  });
+
+  test("no built-in prop parses a string as markup (§21.4)", (t) => {
+    const { mk, app } = fixture(t);
+    const xss = '<img src=x onerror="window.__mkPwned = 1">';
+    t.cleanup(() => { delete window.__mkPwned; });
+
+    // §21.4: string content is assigned with textContent, always. There is no
+    // property anywhere in the built-in catalog that parses a plain string as
+    // markup, so this sweeps the ones that render author-supplied text.
+    const pane = app.create("pane", { id: "xss-pane", content: xss });
+    mk.tick();
+    t.equal(pane.el.querySelector("img"), null, "content is text");
+    t.ok(pane.el.textContent.includes("<img"), "and reads back as the literal string");
+
+    const probes = [
+      ["field", { label: xss }],
+      ["dialog", { title: xss, description: xss }],
+      ["toast", { text: xss, ttl: 0 }],
+      ["banner", { text: xss }],
+      ["tooltip", { text: xss, reference: { x: 10, y: 10 } }],
+      ["text-block", { text: xss }],
+      ["menu", { reference: { x: 10, y: 10 }, items: [{ label: xss }] }],
+      ["empty-state", { title: xss, description: xss }]
+    ];
+    for (const [type, props] of probes) {
+      const handle = mk.create(type, props);
+      mk.tick();
+      t.equal(handle.el.querySelector("img"), null, `${type} renders it as text`);
+      if (!handle.node.destroyed) mk.destroy(handle.node);
+    }
+    t.notOk(window.__mkPwned, "and nothing executed");
+  });
+
   test("an unregistered type restores as a placeholder that round-trips (§19.1)", (t) => {
     const { mk } = fixture(t);
     mk.use(persistencePlugin);
