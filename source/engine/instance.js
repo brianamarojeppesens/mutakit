@@ -537,7 +537,25 @@ export class MutakitInstance extends Kernel {
     if (options.layout) node.layoutProps = { ...options.layout };
     if (definition.geometry && definition.geometry.defaults) {
       for (const key of Object.keys(definition.geometry.defaults)) {
-        if (geometry[key] === undefined) geometry[key] = definition.geometry.defaults[key];
+        const fallback = definition.geometry.defaults[key];
+        if (geometry[key] === undefined) {
+          geometry[key] = fallback;
+          continue;
+        }
+        // Fill an object-valued default per axis, not all-or-nothing.
+        //
+        // `size` and `inset` are written `{ w, h }` and `{ top, left, … }`, and
+        // supplying one axis used to discard the type's default for the other.
+        // `notification-feed` defaults to `{ w: 320, h: 'auto' }`; asking for
+        // `size: { w: 320 }` — the same width, spelled out — silently dropped
+        // the height, so the feed resolved to zero high, sat on the bottom edge
+        // it was anchored to, and spilled its messages off the screen. Nothing
+        // reported it, because an author *had* supplied `size`.
+        if (isPlainObject(fallback) && isPlainObject(geometry[key])) {
+          for (const axis of Object.keys(fallback)) {
+            if (geometry[key][axis] === undefined) geometry[key][axis] = fallback[axis];
+          }
+        }
       }
     }
     if (options.positioning) node.positioning = options.positioning;
@@ -1765,6 +1783,11 @@ const ADOPTED_DEFINITION = {
 };
 
 function noop() {}
+
+/** A bag written as a literal — `{ w, h }`, `{ top, left }` — not a Len or array. */
+function isPlainObject(value) {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
 
 /** Layers at or above `overlay` sit outside the parent's flow entirely. */
 const PORTALLED_LAYERS = new Set(["overlay", "modal", "popover", "tooltip", "toast", "devtools"]);
