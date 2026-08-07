@@ -29,10 +29,6 @@ export const anchorLayout = {
     }
   },
 
-  css() {
-    return { position: "relative" };
-  },
-
   styles: `
     /*
      * The :not(.mk-node) guard is load-bearing, not tidiness. This rule and

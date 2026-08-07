@@ -158,16 +158,18 @@ export const splitLayout = {
     }
   },
 
+  /*
+   * Only what varies per node. `display` and `position` are constants and
+   * belong in `styles` below, where the selector can be guarded — written
+   * inline they override the stylesheet unconditionally, which is how every
+   * container ended up relatively positioned regardless of the guard.
+   */
   css(node) {
-    const options = normalizeOptions(node.algorithmOptions);
-    return {
-      display: "grid",
-      position: "relative",
-      "--mk-split-axis": options.axis
-    };
+    return { "--mk-split-axis": normalizeOptions(node.algorithmOptions).axis };
   },
 
   styles: `
+    [data-mk-algorithm="split"]:not(.mk-node) { position: relative; }
     [data-mk-algorithm="split"] {
       display: grid;
       min-width: 0;

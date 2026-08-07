@@ -113,10 +113,6 @@ export const dockLayout = {
     for (const child of byRegion.center || []) place(ctx, child, centre);
   },
 
-  css() {
-    return { position: "relative" };
-  },
-
   styles: `
     [data-mk-algorithm="dock"]:not(.mk-node) { position: relative; }
     [data-mk-algorithm="dock"] > .mk-node {
@@ -249,10 +245,6 @@ export const gridLayout = {
     });
   },
 
-  css() {
-    return { display: "grid" };
-  },
-
   styles: `[data-mk-algorithm="grid"] { display: grid; }`
 };
 
@@ -325,7 +317,7 @@ export const flowLayout = {
 
   css(node) {
     const options = node.algorithmOptions || {};
-    return { display: "block", gap: options.gap ? `${options.gap}px` : null };
+    return { gap: options.gap ? `${options.gap}px` : null };
   },
 
   styles: `
@@ -425,10 +417,6 @@ export const freeLayout = {
         "--mk-pan-scale": String(pan.scale)
       });
     }
-  },
-
-  css() {
-    return { position: "relative" };
   },
 
   styles: `
