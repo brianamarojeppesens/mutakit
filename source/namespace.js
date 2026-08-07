@@ -149,6 +149,7 @@ export const Mutakit = {
   query: (selector, scope) => instance().query(selector, scope),
   queryAll: (selector, scope) => instance().queryAll(selector, scope),
   build: (spec, parent) => instance().build(spec, parent),
+  layer: (name, options) => instance().layer(name, options),
   adopt: (element, options, parent) => instance().adopt(element, options, parent),
   serialize: (scope, options) => instance().serialize(scope, options),
   restore: (json, options) => instance().restore(json, options),

@@ -43,7 +43,7 @@ const GEOMETRY_KEYS = new Set([
 ]);
 
 const STRUCTURAL_KEYS = new Set([
-  "id", "key", "traits", "algorithm", "content", "slots", "on", "command",
+  "id", "key", "traits", "algorithm", "content", "slots", "children", "on", "command",
   "class", "style", "hidden", "a11y", "layer", "layout", "measureSync"
 ]);
 
@@ -253,6 +253,11 @@ export class MutakitInstance extends Kernel {
         if (!declared || !(name in declared)) this.setSlot(node, name, options.slots[name]);
       }
     }
+    // `children` is a tier-2 word that tier 1 could not say, so §18.5's
+    // abilities stack — `create('stack', { …, children: abilities.map(toSlot) })`
+    // — resolved to 0×0 with nothing in it. `build` strips `children` before
+    // calling here, so a declarative tree still builds them exactly once.
+    if (options.children) for (const child of options.children) this.build(child, node);
 
     if (node.errored) this._placeholder(node);
 
@@ -961,6 +966,25 @@ export class MutakitInstance extends Kernel {
   byId(id) {
     const node = this.ids.get(id);
     return node && !node.destroyed ? this.handleFor(node) : null;
+  }
+
+  /**
+   * A full-frame host in a named layer band — `mk.layer('hud', …)` (§16.1).
+   *
+   * Every overlay family already reaches its band by declaring `layer` on the
+   * type, but a *layer itself* had no spelling: §18.5 opens the HUD example
+   * with this line, and building it by hand meant knowing which type hosts a
+   * band and repeating the four edge constraints that make it full-frame.
+   *
+   * A band with a `<name>-layer` type registered uses it — `hud` has one, and
+   * it carries the pointer-transparency and safe-area insets that make a HUD a
+   * HUD. Any other band gets a plain `pane` assigned to it, which is what a
+   * plugin registering a new band would otherwise write itself.
+   */
+  layer(name, options) {
+    const type = this.registry.get("type", `${name}-layer`) ? `${name}-layer` : "pane";
+    const props = { left: 0, top: 0, right: 0, bottom: 0, ...(options || {}), layer: name };
+    return this.create(type, props);
   }
 
   /** A small selector language over the node tree: type, #id, .state. */
