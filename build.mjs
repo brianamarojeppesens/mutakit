@@ -30,7 +30,8 @@ const PRESETS = [
   { name: "mutakit", entry: "source/entries/full.js", label: "everything" },
   { name: "mutakit.core", entry: "source/entries/core.js", label: "core" },
   { name: "mutakit.dock", entry: "source/entries/dock.js", label: "core + splits + persistence" },
-  { name: "mutakit.app", entry: "source/entries/app.js", label: "core + overlays" }
+  { name: "mutakit.app", entry: "source/entries/app.js", label: "core + overlays + forms" },
+  { name: "mutakit.hud", entry: "source/entries/hud.js", label: "core + HUD + gamepad" }
 ];
 
 const banner = (name) =>

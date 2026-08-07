@@ -4,6 +4,37 @@ All notable changes to Mutakit are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/).
 
+## [0.8.0] — M5: HUD and game (S3)
+
+`hud-layer` and the `hud-*` family, custom units, the gamepad input source,
+spatial navigation, and the PAINT fast path proven under load (PLAN.md §26 M5).
+
+### Added
+
+- **The HUD family** (§11.5): `hud-layer`, `hud-bar` with damage ghosting,
+  `hud-marker` with world-to-screen projection and edge clamping, `crosshair`,
+  `minimap`, `notification-feed`, and `key-prompt`. `hud-*` types default to
+  `a11y: 'presentation'` and `pointer-events: none` — an explicit exception to
+  P5, not an accidental one — while `hud-bar` keeps `role="meter"`, because a
+  health bar carries information a player needs.
+- **The `gu` custom unit** (§10.4), `1gu = min(vw, vh) / 24`, registered
+  through the public extension point as the worked example the plan names. It
+  compiles to a CSS `min()` expression, so the idle path stays free of
+  JavaScript.
+- **Gamepad input and spatial navigation** (§13.5, §13.6), with the scoring
+  function stated and tested: alignment overlap weighted above distance, so a
+  target directly ahead wins over a nearer one off to the side.
+- **The PAINT fast path, measured**: 100 animating HUD elements resolve in
+  ~5.4 ms per frame, inside §20.1's 8 ms budget, with two custom-property
+  writes per element per frame and no layout at all.
+
+### Fixed
+
+- Serialization recorded a custom unit's pixel fallback only for top-level
+  values, so `{ size: { w: '12gu' } }` — the shape §19.1's own example uses —
+  recorded nothing, and a missing unit plugin would have collapsed the element
+  to zero. It recurses now.
+
 ## [0.7.0] — M4: forms (S2 complete)
 
 `field` composition, the control set, the validation subsystem, the `form`

@@ -116,11 +116,19 @@ export class Persistence {
    * the plugin, and it snaps back to the live expression when it returns.
    */
   _len(node, key, value) {
+    // `size` is `{ w, h }`, and a custom unit is most often written there —
+    // §19.1's own example is `{ size: { w: '12u', … } }`. Recursing is the
+    // difference between recording the pixels and silently not.
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      const out = {};
+      for (const inner of Object.keys(value)) out[inner] = this._len(node, inner, value[inner]);
+      return out;
+    }
     if (typeof value !== "string") return value;
     const ast = parse(value);
     if (!ast || ast.k !== "unit") return value;
     if (!this.mk.registry.get("unit", ast.u)) return value;
-    const axis = key === "height" || key === "top" || key === "bottom" ? "y" : "x";
+    const axis = key === "h" || key === "height" || key === "top" || key === "bottom" ? "y" : "x";
     const basis = node.parent ? (axis === "y" ? node.parent.frame.h : node.parent.frame.w) : 0;
     const px = toNumber(ast, this.mk.lenContext(basis, node));
     return { value, px: isFinite(px) ? px : undefined };

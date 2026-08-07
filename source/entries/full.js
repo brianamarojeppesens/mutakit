@@ -16,6 +16,7 @@
  */
 import { Mutakit, splitsPlugin, persistencePlugin } from "./dock.js";
 import { overlaysPlugin } from "./app.js";
+import { hudPlugin } from "./hud.js";
 
-export { Mutakit, splitsPlugin, persistencePlugin, overlaysPlugin };
+export { Mutakit, splitsPlugin, persistencePlugin, overlaysPlugin, hudPlugin };
 export default Mutakit;

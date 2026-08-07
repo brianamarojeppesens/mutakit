@@ -10,6 +10,7 @@ import { Mutakit } from "../source/entries/full.js";
 import { persistencePlugin } from "../source/services/persistence.js";
 import { counters } from "../source/core/dom.js";
 import * as mkSplit from "../source/layout/split.js";
+import * as mkInput from "../source/services/input.js";
 
 /** Mount a fresh, deterministically sized instance for one test. */
 function fixture(t, options) {
@@ -1243,6 +1244,127 @@ describe("forms (§11.3)", () => {
     t.cleanup(shortcuts.bind("Mod+P", () => {}, { description: "Print" }));
     t.cleanup(shortcuts.bind("Mod+P", () => {}, { description: "Palette" }));
     t.ok(records.some((r) => r.code === "MK6004"));
+  });
+});
+
+
+describe("HUD and game (§11.5, S3)", () => {
+  test("§18.5's whole HUD, in `at` + `inset` + `size` and no arithmetic", (t) => {
+    const { mk, app } = fixture(t);
+    const hud = app.create("hud-layer", { id: "hud" });
+    mk.tick();
+
+    const health = hud.create("hud-bar", { id: "health", at: "top-left", inset: 16, size: { w: 280, h: 20 } });
+    const map = hud.create("minimap", { id: "map", at: "top-right", inset: 16, size: { w: "12gu", h: "12gu" } });
+    const reticle = hud.create("crosshair", { id: "reticle", at: "center" });
+    const feed = hud.create("notification-feed", { id: "feed", at: "bottom-right", inset: 16, size: { w: 320 } });
+    mk.tick();
+
+    t.deepEqual(rect(health), [16, 16, 280, 20]);
+    t.close(reticle.node.computed.x, 488);
+    t.close(feed.node.computed.x, 664);
+    // 1gu = min(vw, vh) / 24, so the expectation is the live viewport's, not a
+    // constant — which is the entire point of the unit.
+    const metrics = mk.metrics.current;
+    const gu = Math.min(metrics.vw, metrics.vh) / 24;
+    t.close(map.node.computed.w, 12 * gu, 1, "the gu unit scales the map with the viewport");
+    t.equal(getComputedStyle(hud.el).pointerEvents, "none", "and the layer is transparent to the pointer");
+  });
+
+  test("hud-* elements are presentational by default, and a meter is not", (t) => {
+    const { mk, app } = fixture(t);
+    const hud = app.create("hud-layer", { id: "h2" });
+    const reticle = hud.create("crosshair", {});
+    const bar = hud.create("hud-bar", { value: 0.5, label: "Health" });
+    mk.tick();
+
+    t.equal(hud.el.getAttribute("role"), "presentation");
+    t.equal(reticle.el.getAttribute("role"), "presentation", "decoration opts out (§11.5)");
+    t.equal(bar.el.getAttribute("role"), "meter", "but a value a player needs does not");
+    t.equal(bar.el.getAttribute("aria-valuenow"), "50");
+  });
+
+  test("a bar animates on the STYLE path, never through ARRANGE", (t) => {
+    const { mk, app } = fixture(t);
+    const hud = app.create("hud-layer", { id: "h3" });
+    const bar = hud.create("hud-bar", { id: "hp", value: 1, size: { w: 200, h: 16 } });
+    mk.tick();
+
+    const before = { x: bar.node.computed.x, w: bar.node.computed.w };
+    bar.set({ value: 0.4 });
+    mk.tick();
+    t.equal(bar.el.style.getPropertyValue("--mk-hud-fill"), "0.4", "a scale, not a width");
+    t.deepEqual({ x: bar.node.computed.x, w: bar.node.computed.w }, before, "geometry never moved");
+    t.equal(bar.el.style.getPropertyValue("--mk-hud-ghost"), "1", "and the ghost trails behind");
+  });
+
+  test("a marker projects in PAINT and writes only a transform", (t) => {
+    const { mk, app } = fixture(t);
+    const hud = app.create("hud-layer", { id: "h4" });
+    let world = { x: 300, y: 200 };
+    const marker = hud.create("hud-marker", {
+      id: "objective",
+      project: () => ({ x: world.x, y: world.y }),
+      label: "Objective"
+    });
+    mk.tick();
+    t.equal(marker.el.style.transform, "translate3d(300px, 200px, 0px)");
+
+    world = { x: 5000, y: 200 };
+    mk.tick();
+    t.equal(marker.el.getAttribute("data-mk-offscreen"), "", "clamped to the edge");
+    t.equal(marker.el.style.transform, "translate3d(976px, 200px, 0px)");
+    t.equal(marker.node.computed.x, 0, "and the layout rect never moved");
+  });
+
+  test("the custom unit records its pixels when serialized (§19.1)", (t) => {
+    const { mk, app } = fixture(t);
+    mk.use(persistencePlugin);
+    const hud = app.create("hud-layer", { id: "h5" });
+    hud.create("minimap", { id: "m", size: { w: "12gu", h: "12gu" } });
+    mk.tick();
+
+    const doc = mk.serialize();
+    const map = JSON.stringify(doc);
+    t.ok(map.includes('"12gu"'), "the live expression survives");
+    t.ok(map.includes('"px"'), "alongside the pixels, so a missing plugin cannot collapse it");
+  });
+
+  test("spatial navigation prefers alignment over raw distance (§13.6)", (t) => {
+    const { mk } = fixture(t);
+    const from = { x: 0, y: 100, w: 50, h: 50 };
+    // Directly ahead but far, versus near but off to the side.
+    const ahead = { x: 400, y: 100, w: 50, h: 50 };
+    const aside = { x: 80, y: 400, w: 50, h: 50 };
+    t.ok(
+      mkInput.score(from, ahead, "right") < mkInput.score(from, aside, "right"),
+      "a target directly ahead is almost always the intended one"
+    );
+    t.equal(mkInput.score(from, { x: -200, y: 100, w: 50, h: 50 }, "right"), Infinity,
+      "and nothing behind you is a candidate");
+  });
+
+  test("100 animating HUD elements stay on the PAINT path", (t) => {
+    const { mk, app } = fixture(t);
+    const hud = app.create("hud-layer", { id: "load" });
+    const bars = [];
+    for (let i = 0; i < 100; i++) {
+      bars.push(hud.create("hud-bar", { at: "top-left", inset: i, size: { w: 60, h: 6 }, value: 1 }));
+    }
+    mk.tick();
+
+    const writesBefore = mk.compiler.writes;
+    const started = performance.now();
+    for (let frame = 0; frame < 10; frame++) {
+      for (const bar of bars) bar.set({ value: (frame % 10) / 10 });
+      mk.tick();
+    }
+    const elapsed = (performance.now() - started) / 10;
+
+    t.ok(elapsed < 16, `${elapsed.toFixed(1)}ms per frame for 100 elements`);
+    // Two custom properties per bar per frame is the whole write cost.
+    const perFrame = (mk.compiler.writes - writesBefore) / 10;
+    t.ok(perFrame <= 100 * 3, `${perFrame} property writes per frame, no layout`);
   });
 });
 
