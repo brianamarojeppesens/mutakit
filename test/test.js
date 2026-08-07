@@ -1712,6 +1712,59 @@ describe("ecosystem (§26 M6)", () => {
     t.throws(() => compileDSL("split x {\n  240px\n}"), /line 2/);
   });
 
+  test("Appendix B.1's S1 shell builds verbatim, all 26 lines (§1.5)", (t) => {
+    const host = t.sandbox();
+    host.style.cssText = "position:relative;width:1200px;height:800px";
+    const mk = Mutakit.create({ theme: "dark" });
+    t.cleanup(() => mk.destroyInstance());
+    const app = mk.mount(host, { sizing: "fixed", size: { w: 1200, h: 800 } });
+
+    const shell = app.dock({
+      corners: "horizontal",
+      regions: {
+        top: { id: "menubar", size: 36 },
+        bottom: { id: "statusbar", size: 22 },
+        center: { id: "body" }
+      }
+    });
+    // `region('body')` names the centre by the id it was given. Before this the
+    // appendix's line 8 was not expressible: `dock()` handed back an array, so
+    // the author had to know the order the implementation built regions in.
+    const [explorer, work] = shell.region("body").split({
+      axis: "x",
+      gutter: { size: 6, draggable: true },
+      panes: [
+        { id: "explorer", size: 260, min: 160, max: "40%", collapsible: { at: 120, to: 0 } },
+        { id: "work", size: "1fr" }
+      ]
+    });
+    const [editor, panel] = work.split({
+      axis: "y",
+      gutter: { size: 6, draggable: true },
+      panes: [
+        { id: "editor", size: "1fr", min: 120 },
+        { id: "panel", size: 200, min: 60, collapsible: { at: 48, to: 0 } }
+      ]
+    });
+    explorer.create("tree", { id: "files", data: [{ id: "a", label: "a.js" }], selection: "single" });
+    editor.create("tabs", { id: "docs", closable: true, reorderable: true });
+    panel.create("tabs", { id: "panels", tabs: ["Terminal", "Problems"] });
+    mk.persist("ide-layout", { storage: localStorage, debounce: 300 });
+    mk.tick();
+
+    t.deepEqual(rect(mk.byId("menubar")), [0, 0, 1200, 36], "the menubar spans the top");
+    t.deepEqual(rect(mk.byId("statusbar")), [0, 778, 1200, 22], "the statusbar sits on the bottom");
+    t.deepEqual(rect(mk.byId("body")), [0, 36, 1200, 742], "and the centre takes what is left");
+    t.equal(Math.round(mk.byId("explorer").node.computed.w), 260);
+    t.equal(Math.round(mk.byId("panel").node.computed.h), 200);
+    t.equal(Math.round(mk.byId("editor").node.computed.h), 536, "1fr minus the panel and gutter");
+    // A tab group declared no default size at all, so it collapsed to 0×1 —
+    // the entire editor area disappeared while every pane around it was right.
+    t.equal(Math.round(mk.byId("docs").node.computed.h), 536, "tabs fill the pane they are in");
+    t.equal(Math.round(mk.byId("files").node.computed.w), 260);
+    t.equal(typeof mk.persist, "function", "and a created instance has the preset's plugins");
+  });
+
   test("dock arbitrates its corners and contributes insets to the centre (§7.4)", (t) => {
     const { mk, app } = fixture(t);
     mk.applyAlgorithm(app.node, "dock", {

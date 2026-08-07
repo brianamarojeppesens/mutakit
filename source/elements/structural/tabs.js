@@ -24,6 +24,11 @@ export const tabs = {
     placement: { type: "enum", values: ["top", "bottom"], default: "top" }
   },
 
+  // A tab group fills the pane it is put in. Declaring nothing left it at 0×1
+  // — the whole editor area vanished, and the author's next move is to guess a
+  // pixel size for something that should simply take the space it was given.
+  geometry: { defaults: { size: { w: "100%", h: "100%" } } },
+
   events: ["change", "close", "reorder"],
   a11y: { role: "group", props: { "aria-label": (ctx) => ctx.props.label || null } },
 
