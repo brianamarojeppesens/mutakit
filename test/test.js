@@ -610,6 +610,43 @@ describe("persistence (§19)", () => {
     t.equal(second.mk.byId("s-tree").el.textContent, "files", "and its text came with it");
   });
 
+  test("migrations chain, and a newer document says so (§19.2)", (t) => {
+    const { mk } = fixture(t);
+    const steps = [];
+    // §19.2's registration shape, verbatim: `{ from, to, migrate }`, chained
+    // automatically. Two versions behind must walk through both.
+    Mutakit.serializer({ from: -1, to: 0, migrate(doc) {
+      steps.push("-1->0");
+      return { ...doc, schema: 0 };
+    } });
+    Mutakit.serializer({ from: 0, to: 1, migrate(doc) {
+      steps.push("0->1");
+      return { ...doc, schema: 1, tree: doc.tree.map((n) => ({ ...n, id: n.id.replace("old-", "new-") })) };
+    } });
+
+    mk.restore({ schema: -1, mutakit: "0.1.0", frame: { algorithm: "anchor" },
+      tree: [{ type: "pane", id: "old-a", size: { w: 40, h: 40 } }] }, { allow: "any" });
+    mk.tick();
+    t.deepEqual(steps, ["-1->0", "0->1"], "both migrations ran, in order");
+    t.ok(mk.byId("new-a"), "and the transform they describe was applied");
+    t.equal(mk.byId("old-a"), null);
+
+    // The other direction is not a missing migration. Walking *forward* from a
+    // newer document travels away from the format this build reads, and the
+    // message asked the author for a migration they could never write.
+    const codes = [];
+    Mutakit.diagnostics.reset();
+    Mutakit.diagnostics.sink((record) => codes.push(record));
+    t.cleanup(() => Mutakit.diagnostics.sink(null));
+    mk.restore({ schema: 99, mutakit: "9.0.0", frame: { algorithm: "anchor" },
+      tree: [{ type: "pane", id: "from-future", size: { w: 40, h: 40 } }] }, { allow: "any" });
+    mk.tick();
+
+    t.ok(mk.byId("from-future"), "it is still restored — a newer file must not brick a workspace");
+    const said = codes.find((r) => r.code === "MK4015");
+    t.ok(said && /saved by a newer Mutakit/.test(said.message), "and it says what actually happened");
+  });
+
   test("restore is default-strict, and `props: 'schema'` keeps DOM sinks out (§21.4)", (t) => {
     const { mk } = fixture(t);
     const codes = [];

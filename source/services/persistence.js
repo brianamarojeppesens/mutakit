@@ -264,6 +264,22 @@ export class Persistence {
   }
 
   _migrate(doc) {
+    // A document from a *newer* library than this one is not a missing
+    // migration — it is a version nobody here could have written a migration
+    // for. Stepping forward from it walked away from the version we want,
+    // 32 times, and then reported "no migration from schema 99 to 100": a
+    // migration the author would have to write to travel further from the
+    // format this build actually understands.
+    if (doc.schema > SCHEMA_VERSION) {
+      warn("MK4015", __MK_DEV__ &&
+        `this layout was saved by a newer Mutakit (schema ${doc.schema}; this build reads ` +
+          `${SCHEMA_VERSION}) and is restored as-is. Anything it declares that this version ` +
+          `does not understand is reported separately and kept.`,
+        { subject: `schema:${doc.schema}` }
+      );
+      return doc;
+    }
+
     let current = doc;
     let guard = 0;
     while (current.schema !== SCHEMA_VERSION && guard++ < 32) {
