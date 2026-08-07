@@ -2476,6 +2476,41 @@ describe("ecosystem (§26 M6)", () => {
     t.equal(mk.byId("one").el.hasAttribute("inert"), true);
   });
 
+  test("devtools takes what the public API returns — a handle (§19.3)", (t) => {
+    const { mk, app } = fixture(t);
+    mk.use(devtoolsPlugin);
+    app.dock({ regions: { top: { id: "dv-bar", size: 40 }, center: { id: "dv-main" } } });
+    mk.byId("dv-main").create("pane", { id: "dv-leaf", content: "hi" });
+    mk.tick();
+
+    // Every public entry point returns a *handle* — `byId`, `create`, `region`,
+    // `query`. Devtools was written against the engine's nodes, so the natural
+    // call threw on `root.walk is not a function`: the geometry overlay §19.3
+    // calls the single most valuable debugging feature for a geometry library,
+    // failing on the only argument a user has to hand.
+    const devtools = mk.devtools;
+    const handle = mk.byId("dv-main");
+    t.ok(devtools.tree(handle), "tree accepts a handle");
+    t.ok(devtools.explain(handle), "so does explain");
+    t.ok(devtools.select(mk.byId("dv-leaf")), "and select");
+    t.ok(devtools.showOverlay(handle), "and the overlay");
+    mk.tick();
+    t.ok(devtools.overlayEl.querySelectorAll(".mk-devtools-box").length > 0, "which draws a box");
+    devtools.hideOverlay();
+
+    // The other two spellings still work: an id, and a raw node.
+    t.ok(devtools.explain("dv-leaf"), "an id still resolves");
+    t.ok(devtools.explain(mk.byId("dv-leaf").node), "and so does a node");
+
+    // §19.3's layout editor exports "the tier-2 JSON" — which has to restore.
+    const before = mk.snapshot();
+    const exported = devtools.export();
+    const second = fixture(t);
+    second.mk.restore(exported, { allow: "any" });
+    second.mk.tick();
+    t.deepEqual(second.mk.snapshot(), before, "and it rebuilds the same layout");
+  });
+
   test("devtools explains a dropped constraint (§19.3)", (t) => {
     const { mk, app } = fixture(t);
     mk.use(devtoolsPlugin);

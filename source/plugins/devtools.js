@@ -54,7 +54,7 @@ export class Devtools {
 
   /** The tree inspector: props, computed geometry, traits, and dirty flags. */
   tree(scope) {
-    const root = scope || this.mk.root;
+    const root = asNode(this.mk, scope) || this.mk.root;
     if (!root) return null;
     const describe = (node) => ({
       type: node.type,
@@ -80,7 +80,7 @@ export class Devtools {
    * axis, so this reports what actually happened rather than re-deriving it.
    */
   explain(nodeOrId) {
-    const node = typeof nodeOrId === "string" ? idNode(this.mk, nodeOrId) : nodeOrId;
+    const node = asNode(this.mk, nodeOrId);
     if (!node) return null;
     return {
       node: node.toString(),
@@ -103,7 +103,7 @@ export class Devtools {
   /** The geometry overlay: frames, insets, and anchor points, drawn in place. */
   showOverlay(scope) {
     this.hideOverlay();
-    const root = scope || this.mk.root;
+    const root = asNode(this.mk, scope) || this.mk.root;
     if (!root || !root.el) return null;
 
     const overlay = dom.el("div", {
@@ -148,7 +148,7 @@ export class Devtools {
   }
 
   select(nodeOrId) {
-    this.selected = typeof nodeOrId === "string" ? idNode(this.mk, nodeOrId) : nodeOrId;
+    this.selected = asNode(this.mk, nodeOrId);
     return this.explain(this.selected);
   }
 
@@ -232,6 +232,22 @@ export class Devtools {
 function idNode(mk, id) {
   const handle = mk.byId(id);
   return handle ? handle.node : null;
+}
+
+/**
+ * A node, from whatever the caller had.
+ *
+ * Every public entry point in the library returns a *handle* — `byId`,
+ * `create`, `region`, `query` — while everything in here was written against
+ * the engine's nodes. So the natural call, `devtools.showOverlay(mk.byId('x'))`,
+ * threw on `root.walk is not a function`: the overlay §19.3 calls the single
+ * most valuable debugging feature in a geometry library, failing on the only
+ * argument a user has to hand. Accepting all three spellings costs a line.
+ */
+function asNode(mk, value) {
+  if (typeof value === "string") return idNode(mk, value);
+  if (value && value.node) return value.node;
+  return value || null;
 }
 
 function plainProps(node) {
