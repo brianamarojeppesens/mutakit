@@ -4,7 +4,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mutakit — S2, the application chrome</title>
-<style>html,body{margin:0;height:100%;font:14px/1.5 system-ui,sans-serif}</style>
+<style>
+  html, body { margin: 0; height: 100%; font: 14px/1.5 system-ui, sans-serif;
+               color: #16181d; background: #fff; }
+  /* The library sizes and places the regions; how a shell *looks* is the
+     application's business, so the chrome is styled here rather than shipped. */
+  [data-mk-id="menubar"]   { background: #f7f8fa; border-bottom: 1px solid #e3e6ea; }
+  [data-mk-id="explorer"]  { background: #fbfcfd; border-right: 1px solid #e3e6ea; }
+  [data-mk-id="statusbar"] { background: #f7f8fa; border-top: 1px solid #e3e6ea;
+                             font-size: 12px; color: #5b6270; }
+  .tree-heading { font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+                  color: #5b6270; }
+  .tree-item { padding: 3px 8px; border-radius: 5px; cursor: default; }
+  .tree-item:hover { background: #eef1f4; }
+</style>
 </head>
 <body>
 <!--
@@ -30,6 +43,16 @@ bar.create("button", { text: "Settings…", at: "left", inset: 8, on: { activate
 bar.create("pane", { content: "Ctrl+K for the command palette", at: "right", inset: 12 });
 Mutakit.byId("statusbar").create("pane", { content: "Ready", at: "left", inset: 8 });
 
+// The explorer was declared 240px wide and left empty, so the shell rendered as
+// a blank column: the region worked, there was simply nothing in it.
+const explorer = Mutakit.byId("explorer");
+const tree = explorer.create("stack", { axis: "y", gap: 2, at: "top-left",
+                                        inset: 12, size: { w: "100%", h: "auto" } });
+tree.create("pane", { content: "Explorer", class: "tree-heading" });
+for (const name of ["index.html", "main.js", "styles.css", "README.md"]) {
+  tree.create("pane", { content: name, class: "tree-item" });
+}
+
 // Written the way Appendix B.2 writes it: one declarative tree, slots filled
 // by name, buttons invoking the dialog's own commands (§18.2). Nothing here is
 // a function, so the whole dialog serializes.
@@ -50,14 +73,23 @@ function openSettings() {
     },
     actions: [
       { label: "Cancel", command: "cancel" },
-      { label: "Save", command: "submit", variant: "primary" }
+      // Deliberately not the built-in `submit`. That command emits and then
+      // dismisses in the same breath, so the dialog was gone before the form
+      // had been asked whether it was valid — clicking Save with the required
+      // email empty closed the dialog and silently saved nothing. A name that
+      // is not one of the type's commands emits `action` and leaves the dialog
+      // open, which is what lets validation have a say.
+      { label: "Save", command: "save", variant: "primary" }
     ]
   });
-  dialog.on("action", (event) => {
-    if (event.detail.action !== "submit") return;
-    Mutakit.byId("prefs-form").submit().then((ok) => {
-      if (ok) Mutakit.create("toast", { text: "Settings saved", variant: "success" });
-    });
+  dialog.on("action", async (event) => {
+    if (event.detail.action !== "save") return;
+    const ok = await Mutakit.byId("prefs-form").submit();
+    // Invalid: stay open. The form has already marked the offending fields and
+    // moved focus to the first one, so there is nothing further to do here.
+    if (!ok) return;
+    dialog.submit();
+    Mutakit.create("toast", { text: "Settings saved", variant: "success" });
   });
 }
 
