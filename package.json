@@ -49,12 +49,15 @@
     "test:browser": "node tools/serve.mjs --run",
     "test": "npm run test:unit && npm run lint && npm run build && npm run test:browser",
     "serve": "node tools/serve.mjs",
-    "r1": "node tools/r1-measure.mjs"
+    "r1": "node tools/r1-measure.mjs",
+    "test:browser:all": "MK_ENGINES=chromium,firefox,webkit node tools/serve.mjs --run",
+    "test:bench": "MK_PAGES=bench node tools/serve.mjs --run"
   },
   "devDependencies": {
     "@playwright/test": "1.62.1",
     "axe-core": "4.13.0",
     "esbuild": "0.28.1",
+    "playwright": "^1.62.1",
     "typescript": "7.0.2"
   },
   "repository": {

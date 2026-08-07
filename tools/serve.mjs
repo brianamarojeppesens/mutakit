@@ -9,6 +9,11 @@
  *
  *   node tools/serve.mjs           serve on :8080
  *   node tools/serve.mjs --run     serve, drive the harness, print TAP, exit
+ *
+ * Two environment variables select what `--run` covers:
+ *
+ *   MK_ENGINES=chromium,firefox,webkit   §25.3 baseline engines (default: chromium)
+ *   MK_PAGES=harness,a11y,bench          harness pages (default: harness,a11y)
  */
 import { createServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";
@@ -60,6 +65,29 @@ export function serve(port = PORT) {
 }
 
 /**
+ * The pages that publish a `window.harness`.
+ *
+ * All three implement the same contract — `{ done, results, summary }` — but
+ * until this list existed the driver only ever visited the first one, so the
+ * axe sweep and the benchmarks were automated in every respect except being
+ * run. Checking them meant opening a browser by hand, which meant in practice
+ * that they were checked when someone remembered to.
+ *
+ * `bench` is not in the default set. Its budgets are wall-clock, and a shared
+ * CI runner is the wrong instrument for them: the split-drag scenario already
+ * moves between 3.1 and 4.5 ms against a 4 ms budget on identical code (see
+ * test/bench/bench.js). Gating merges on that would teach everyone to re-run
+ * red builds until they go green, which costs more than the signal is worth.
+ * CI runs it as a separate, non-blocking job.
+ */
+const PAGES = {
+  harness: { url: "/test/index.html", label: "harness" },
+  a11y: { url: "/test/a11y.html", label: "a11y" },
+  bench: { url: "/test/bench/", label: "bench" }
+};
+const DEFAULT_PAGES = ["harness", "a11y"];
+
+/**
  * Drive the harness with Playwright and print TAP.
  *
  * Playwright covers every §25.3 baseline engine from one script, which is what
@@ -68,8 +96,14 @@ export function serve(port = PORT) {
  * run reports it and exits non-zero rather than passing silently.
  */
 async function run() {
-  const server = await serve(PORT);
+  // An ephemeral port, as r1-measure.mjs already uses. A driven run has no
+  // caller that needs to know the address, so binding the documented dev port
+  // bought nothing and made `--run` fail outright whenever a dev server was
+  // already up — which is most of the time someone is working on the library.
+  const server = await serve(Number(process.env.PORT || 0));
+  const port = server.address().port;
   const engines = (process.env.MK_ENGINES || "chromium").split(",");
+  const pages = (process.env.MK_PAGES || DEFAULT_PAGES.join(",")).split(",");
   let failures = 0;
   let playwright;
 
@@ -82,10 +116,20 @@ async function run() {
     return;
   }
 
+  // One plan for the whole run, printed at the end. A `1..N` per engine looks
+  // reasonable and is not valid TAP: consumers take the second plan as a new
+  // stream and report the counts of one engine as the counts of all of them.
+  const lines = [];
+  let n = 0;
+  const emit = (ok, name, detail) => {
+    lines.push(`${ok ? "ok" : "not ok"} ${++n} - ${name}${detail || ""}`);
+  };
+
   for (const engine of engines) {
     const launcher = playwright[engine];
     if (!launcher) {
-      console.error(`# unknown engine '${engine}'`);
+      lines.push(`# unknown engine '${engine}'`);
+      emit(false, `${engine} — unknown engine`);
       failures++;
       continue;
     }
@@ -93,35 +137,64 @@ async function run() {
     try {
       browser = await launcher.launch();
     } catch (error) {
-      console.error(`# ${engine}: could not launch — ${firstLine(error)}`);
+      // An engine that cannot launch has not agreed with anything. Reporting
+      // it as a failed assertion rather than a skipped one is deliberate: a
+      // missing engine used to leave no trace in the TAP stream at all.
+      lines.push(`# ${engine}: could not launch — ${firstLine(error)}`);
+      emit(false, `${engine} — could not launch`);
       failures++;
       continue;
     }
 
-    const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
-    const consoleErrors = [];
-    page.on("pageerror", (error) => consoleErrors.push(String(error)));
-    await page.goto(`http://localhost:${PORT}/test/index.html`, { waitUntil: "load" });
-    await page.waitForFunction(() => window.harness && window.harness.done, null, { timeout: 30000 });
-    const results = await page.evaluate(() => window.harness.results);
+    for (const key of pages) {
+      const target = PAGES[key];
+      if (!target) {
+        lines.push(`# unknown page '${key}'`);
+        emit(false, `${engine} — unknown page '${key}'`);
+        failures++;
+        continue;
+      }
 
-    console.log(`# ${engine}`);
-    console.log(`1..${results.length}`);
-    results.forEach((result, index) => {
-      const status = result.skipped ? "ok" : result.passed ? "ok" : "not ok";
-      const directive = result.skipped ? " # SKIP" : "";
-      console.log(`${status} ${index + 1} - ${result.name}${directive}`);
-      if (!result.passed && !result.skipped) {
-        console.log(`  ---\n  message: ${result.error}\n  ...`);
+      const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+      const consoleErrors = [];
+      page.on("pageerror", (error) => consoleErrors.push(String(error)));
+      lines.push(`# ${engine} · ${target.label}`);
+
+      try {
+        await page.goto(`http://localhost:${port}${target.url}`, { waitUntil: "load" });
+        await page.waitForFunction(() => window.harness && window.harness.done, null, { timeout: 60000 });
+      } catch (error) {
+        // A page that never finishes is the one case where reporting nothing
+        // reads as success — there are no failed assertions because there are
+        // no assertions at all.
+        emit(false, `${engine} · ${target.label} — never completed`);
+        lines.push(`  ---\n  message: ${firstLine(error)}\n  ...`);
+        failures++;
+        await page.close();
+        continue;
+      }
+
+      const results = await page.evaluate(() => window.harness.results);
+      for (const result of results) {
+        const ok = result.skipped || result.passed;
+        emit(ok, `${engine} · ${target.label} · ${result.name}`, result.skipped ? " # SKIP" : "");
+        if (!ok) {
+          lines.push(`  ---\n  message: ${result.error}\n  ...`);
+          failures++;
+        }
+      }
+      for (const error of consoleErrors) {
+        emit(false, `${engine} · ${target.label} — uncaught: ${error}`);
         failures++;
       }
-    });
-    for (const error of consoleErrors) {
-      console.log(`# uncaught: ${error}`);
-      failures++;
+      await page.close();
     }
     await browser.close();
   }
+
+  for (const line of lines) console.log(line);
+  console.log(`1..${n}`);
+  console.log(`# ${n - failures}/${n} passed across ${engines.join(", ")}`);
 
   server.close();
   if (failures) process.exitCode = 1;

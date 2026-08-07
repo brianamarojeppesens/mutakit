@@ -1,0 +1,149 @@
+# The five gates from PLAN.md §25.4, run on every push.
+#
+# The point of this file is a claim the project could not previously make. Up to
+# 1.0.0 the browser suite was run in Chrome, by hand, by whoever remembered;
+# cross-engine evidence extended only to R1's 42 measured cases. `serve.mjs` had
+# supported MK_ENGINES the whole time. Nothing was missing except something that
+# ran it.
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+# A superseded push tells you nothing you still care about.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Everything that needs no browser. Fast, and the matrix is not decoration:
+  # package.json claims `engines: >=22.12`, and an untested lower bound is a
+  # guess. If 22 breaks, the claim is wrong and this says so.
+  check:
+    name: check (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["22.12", "24"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - name: lint-arch
+        run: npm run lint
+      - name: unit tests
+        run: npm run test:unit
+      - name: build (strict budget)
+        run: node build.mjs --strict-budget
+      - name: types
+        run: npx tsc --noEmit
+
+  # The §25.3 baseline engines, one job each so a WebKit-only failure is legible
+  # as a WebKit failure. fail-fast is off for the same reason: knowing that
+  # Firefox also broke is worth the extra minutes.
+  browser:
+    name: browser (${{ matrix.engine }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [chromium, firefox, webkit]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - name: install ${{ matrix.engine }}
+        run: npx playwright install --with-deps ${{ matrix.engine }}
+      - name: build
+        run: npm run build
+      - name: harness + a11y
+        run: node tools/serve.mjs --run
+        env:
+          MK_ENGINES: ${{ matrix.engine }}
+          MK_PAGES: harness,a11y
+
+  # R1's exit gate (§27.2). Discharged on record, and re-run here so it stays
+  # discharged: the question is whether CSS clamping still agrees across
+  # engines, and engines ship every few weeks.
+  r1:
+    name: R1 cross-engine clamping
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium firefox webkit
+      - run: npm run r1
+
+  # Reproducibility, as the release notes claim it: not "the build is
+  # deterministic in place" but "a clean checkout of this commit produces the
+  # same twenty artifacts". Those are different claims and only the second one
+  # is worth anything to someone verifying a release.
+  reproducible:
+    name: reproducible build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: node build.mjs
+      - name: rebuild from a clean checkout and compare
+        run: |
+          set -euo pipefail
+          git clone -q --no-local . /tmp/clean
+          ln -s "$PWD/node_modules" /tmp/clean/node_modules
+          ( cd /tmp/clean && node build.mjs >/dev/null )
+          same=0; differ=0
+          for f in build/*.js; do
+            if cmp -s "$f" "/tmp/clean/$f"; then
+              same=$((same+1))
+            else
+              differ=$((differ+1)); echo "DIFFERS: $f"
+            fi
+          done
+          echo "byte-identical: $same, differing: $differ"
+          # A zero-artifact run compares nothing and would otherwise pass.
+          test "$same" -gt 0 && test "$differ" -eq 0
+
+  # Wall-clock budgets on a shared runner are a measurement of the runner. This
+  # reports and never blocks; treat a red mark as "look at it", not "it broke".
+  # A gate that fails a quarter of the time on unchanged code trains people to
+  # re-run until green, which is worse than no gate at all.
+  bench:
+    name: benchmarks (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - name: §20.3 benchmarks
+        run: node tools/serve.mjs --run
+        env:
+          MK_ENGINES: chromium
+          MK_PAGES: bench
