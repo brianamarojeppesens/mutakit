@@ -1,11 +1,16 @@
 # Mutakit
 
+[![version](https://img.shields.io/github/v/tag/brianamarojeppesens/mutakit?label=version&color=0a7bbb)](https://github.com/brianamarojeppesens/mutakit/releases)
+[![license](https://img.shields.io/badge/license-MIT-0a7bbb)](LICENSE)
+[![runtime dependencies](https://img.shields.io/badge/runtime%20deps-0-2ea043)](package.json)
+[![gzipped](https://img.shields.io/badge/gzipped-31.8%20kB%20core%20%C2%B7%2073.9%20kB%20full-0a7bbb)](docs/size-accounting.md)
+
 A dependency-free browser library that builds and mutates graphical user
 interfaces from declarative geometry — you describe *what element* and *where*,
 and the library resolves layout, interaction, accessibility, and styling.
 
 ```html
-<script src="build/mutakit.min.js"></script>
+<script src="https://github.com/brianamarojeppesens/mutakit/releases/latest/download/mutakit.min.js"></script>
 <script>
   const app = Mutakit.mount(document.body, { sizing: 'viewport' });
 
