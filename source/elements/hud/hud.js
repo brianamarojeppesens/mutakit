@@ -123,7 +123,19 @@ export const hudBar = {
 
   styles: css`
     .mk-hud-bar {
-      position: relative;
+      /*
+       * No position declaration here. The fill and ghost need a containing
+       * block, and an absolutely positioned box establishes one exactly as a
+       * relative box does — so declaring relative bought nothing and cost the
+       * layout: it beat the base stylesheet's absolute positioning on .mk-node,
+       * and a relative box offsets from where *flow* put it. With ninety bars
+       * in one anchor parent those offsets compounded and the whole row was
+       * pushed off the bottom of the viewport, engine-correct geometry and all.
+       *
+       * This is the same defect the guard in layout/anchor.js was written to
+       * fix, reintroduced one layer further out. The engine decides whether a
+       * node is absolute or in flow; an element stylesheet must not.
+       */
       overflow: hidden;
       background: var(--mk-hud-bar-track, rgb(0 0 0 / 0.5));
       border-radius: var(--mk-radius-sm);
@@ -253,8 +265,12 @@ export const crosshair = {
   type: "crosshair",
   version: "1.0.0",
   props: {
-    state: { type: "enum", values: ["idle", "target", "hit", "reload"], default: "idle" },
-    size: { type: "number", default: 24 }
+    state: { type: "enum", values: ["idle", "target", "hit", "reload"], default: "idle" }
+    // No `size` prop. It was declared as a number, never read by `create` or
+    // `update`, and contradicted this type's own geometry default of
+    // `{ w: 24, h: 24 }` — a declared prop wins the name over geometry, so the
+    // universal `size: { w, h }` was validated as a number and threw. A
+    // crosshair sizes itself the way every other element does.
   },
   a11y: "presentation",
   geometry: { defaults: { at: "center", size: { w: 24, h: 24 } } },

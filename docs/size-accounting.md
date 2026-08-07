@@ -156,11 +156,11 @@ rather than absorbed.
 
 | Preset | Minified | Gzipped |
 |---|---:|---:|
-| `mutakit` | 241.14 KB | 73.90 KB |
+| `mutakit` | 241.04 KB | 73.88 KB |
 | `mutakit.core` | 95.57 KB | 31.86 KB |
-| `mutakit.dock` | 146.05 KB | 47.32 KB |
-| `mutakit.app` | 171.18 KB | 52.41 KB |
-| `mutakit.hud` | 109.52 KB | 36.24 KB |
+| `mutakit.dock` | 146.03 KB | 47.31 KB |
+| `mutakit.app` | 171.15 KB | 52.40 KB |
+| `mutakit.hud` | 109.47 KB | 36.23 KB |
 <!-- sizes:end -->
 
 `mutakit.core` is §4.2's core; `mutakit.hud` adds the HUD elements and gamepad;

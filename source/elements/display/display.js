@@ -431,7 +431,12 @@ export const list = {
   },
 
   styles: css`
-    .mk-list { position: relative; overflow: auto; }
+    /* No position declaration: the engine decides whether a node is
+       absolute or in flow, and an absolutely positioned box establishes a
+       containing block just as a relative one does. Declaring it here beat
+       the base stylesheet's absolute positioning on .mk-node and displaced
+       the element by whatever flow put above it. See layout/anchor.js. */
+    .mk-list { overflow: auto; }
     .mk-list__row {
       display: flex;
       align-items: center;

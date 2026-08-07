@@ -177,7 +177,12 @@ export const combobox = {
   },
 
   styles: css`
-    .mk-combobox { position: relative; width: 100%; }
+    /* No position declaration: the engine decides whether a node is
+       absolute or in flow, and an absolutely positioned box establishes a
+       containing block just as a relative one does. Declaring it here beat
+       the base stylesheet's absolute positioning on .mk-node and displaced
+       the element by whatever flow put above it. See layout/anchor.js. */
+    .mk-combobox { width: 100%; }
     .mk-combobox__list {
       position: absolute;
       z-index: 1;
