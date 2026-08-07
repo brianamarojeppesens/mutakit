@@ -25,6 +25,19 @@ size budget (§20.1), which is 2.0× over for the full preset and 3.8× for core
 
 ### Added
 
+- **Stores (§15.3)** — an observable store with structural sharing, path
+  subscriptions, and time travel in development, shipped with the preset that
+  persists a layout. `select()` returns a *signal*, so a store slice goes
+  anywhere a value does, and the store sits above signals rather than replacing
+  them.
+  - **Structural sharing** is the property the rest rests on: only the nodes on
+    a written path are recreated, so an untouched branch keeps its identity and
+    a diff can skip it by reference. An unchanged write is a no-op that
+    notifies nobody, which matters because layout state is written on every
+    frame of a drag.
+  - **Time travel** truncates the redo tail on a new write, as every editor
+    does, and notifies subscribers on undo so the UI follows.
+
 - **Gestures (§13.3) and the delegated pointer queue (§13.2).** Nine
   recognizers — `tap`, `double-tap`, `long-press`, `drag`, `swipe`, `pinch`,
   `rotate`, `wheel`, `scrub` — written as **pure reducers**,

@@ -304,6 +304,13 @@ is deferred to the next frame, so a runaway cycle degrades to a janky UI rather
 than a frozen tab.
 **Fix.** Look for an effect that writes a signal it also reads.
 
+### MK5006 — Development-only affordance used in a production build
+**Cause.** Something that exists only in the development build was asked for in
+production — a store's time-travel timeline is the case that occurs. It returns
+an empty result rather than throwing.
+**Fix.** None in production; the affordance is a debugging tool and its absence
+is the point. If you need the data at runtime, keep your own snapshots.
+
 ### MK5004 — Animating a layout-affecting property
 **Cause.** Motion presets may animate `transform`, `opacity`, `filter`, and
 `clip-path` only. Animation may never affect layout correctness (§17).

@@ -13,6 +13,7 @@ import { resizer } from "../elements/structural/resizer.js";
 import { split } from "../elements/structural/split.js";
 import { STRUCTURAL_EXTRAS } from "../elements/structural/tabs.js";
 import { persistencePlugin } from "../services/persistence.js";
+import { storePlugin } from "../services/store.js";
 
 export function installSplits(mk) {
   mk.layout(splitLayout, { replace: true });
@@ -37,6 +38,9 @@ export const splitsPlugin = {
 
 installSplits(Mutakit);
 Mutakit.use(persistencePlugin);
+// Layout-level state (§15.3) travels with the layout, so it belongs to the
+// preset that persists one.
+Mutakit.use(storePlugin);
 
-export { Mutakit, persistencePlugin };
+export { Mutakit, persistencePlugin, storePlugin };
 export default Mutakit;
