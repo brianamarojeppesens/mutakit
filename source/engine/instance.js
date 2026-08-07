@@ -59,6 +59,8 @@ export class MutakitInstance extends Kernel {
 
     this.roots = [];
     this.services = new Map();
+    /** Nodes mid-exit-animation, awaited by `flush({ animations: false })`. */
+    this.exiting = new Set();
     this.handles = new WeakMap();
     this.ids = new Map();
     this.dev = __MK_DEV__ ? { diagnostics: [], frames: 0 } : null;
@@ -276,6 +278,13 @@ export class MutakitInstance extends Kernel {
       if (record.trait.mount) this.guard(node, `trait:${record.trait.name}.mount`, record.trait.mount, [ctx, record.api]);
     }
     emit(node, "mount", { node }, { bubbles: false });
+
+    // The declaration is checked *before* the service is asked for, so a page
+    // whose elements declare no motion never instantiates the service at all.
+    if (node.definition && node.definition.motion) {
+      const motion = this.service("motion");
+      if (motion) motion.play(node, "enter");
+    }
   }
 
   /**
@@ -286,6 +295,33 @@ export class MutakitInstance extends Kernel {
   destroy(node) {
     const target = nodeOf(node);
     if (!target || target.destroyed) return false;
+
+    // Exit animations and destruction interact carefully (§17). A removed
+    // element stays in the tree until its exit completes, but is *immediately*
+    // inert, out of the focus order, and excluded from hit testing — so a
+    // "closing" dialog can never swallow a click meant for what is behind it,
+    // which is a real and common bug in libraries that merely delay removal.
+    // `exited` records that the animation has *already played*, which is not
+    // the same as "is playing". Clearing the in-flight flag before re-entering
+    // destroy re-armed the exit every time, forever.
+    const motion =
+      !target.exited && target.el && target.definition && target.definition.motion
+        ? this.service("motion")
+        : null;
+    if (motion) {
+      target.exited = true;
+      target.exiting = true;
+      target.el.setAttribute("data-mk-exiting", "");
+      target.el.setAttribute("inert", "");
+      target.el.style.pointerEvents = "none";
+      const finish = motion.play(target, "exit").then(() => {
+        target.exiting = false;
+        this.exiting.delete(finish);
+        this.destroy(target);
+      });
+      this.exiting.add(finish);
+      return false;
+    }
 
     for (const child of target.children.slice()) this.destroy(child);
 
@@ -1267,9 +1303,24 @@ export class MutakitInstance extends Kernel {
   }
 
   /** Resolve once the loop is idle. `{ animations: false }` skips motion. */
-  flush(options) {
-    const motion = this.service("motion");
-    if (options && options.animations === false && motion) motion.finishAll();
+  /**
+   * Resolve once the loop is idle.
+   *
+   * `{ animations: false }` finishes every running animation *and* awaits the
+   * teardowns their exits were holding open — which is what §17 promises tests
+   * so that a snapshot never races an animation.
+   */
+  async flush(options) {
+    if (options && options.animations === false) {
+      const motion = this.services.get("motion");
+      if (motion) motion.finishAll();
+      // Each settled exit may start another (a subtree unwinding), so drain.
+      let guard = 0;
+      while (this.exiting.size && guard++ < 32) {
+        await Promise.all([...this.exiting]);
+        if (motion) motion.finishAll();
+      }
+    }
     return new Promise((resolve) => this.scheduler.whenIdle(resolve));
   }
 

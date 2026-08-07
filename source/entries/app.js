@@ -13,6 +13,7 @@ import { dismissible, focusTrap, positioned } from "../traits/overlay.js";
 import { OVERLAY_ELEMENTS } from "../elements/surfaces/overlays.js";
 import { POPOVER_ELEMENTS, tooltipHost } from "../elements/surfaces/popovers.js";
 import { ShortcutService } from "../services/shortcuts.js";
+import { MotionService } from "../services/motion.js";
 import { NATIVE_CONTROLS } from "../elements/forms/controls.js";
 import { COMPOSITE_CONTROLS } from "../elements/forms/composite.js";
 import { FORM_ELEMENTS } from "../elements/forms/form.js";
@@ -46,6 +47,9 @@ export const overlaysPlugin = {
 registerService("focus", () => new FocusService());
 registerService("announcer", () => new AnnouncerService());
 registerService("shortcuts", () => new ShortcutService());
+// Motion is a standard plugin (§4.2), registered as a factory so a page that
+// opens no overlay never instantiates it.
+registerService("motion", () => new MotionService());
 installOverlays(Mutakit);
 
 export { Mutakit };

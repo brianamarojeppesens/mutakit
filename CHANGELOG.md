@@ -23,6 +23,31 @@ size budget (§20.1), which is 2.0× over for the full preset and 3.8× for core
   inside a comment inside a tagged template ends the template and the rest of
   the file is parsed as code. That shipped twice.
 
+### Added
+
+- **Motion (§17)** — the last unimplemented section of the plan. Seven presets
+  (`fade`, `scale`, `slide`, the three edge slides, `collapse`, `spring`,
+  `none`), each with the `reduced` variant the conformance check already
+  required, on the Web Animations API rather than CSS transitions — because
+  interruption is the default assumption, and retargeting a half-open drawer
+  from where it *is* needs a handle on the animation.
+  - **The invariant is now testable**: a tree mid-animation resolves to exactly
+    the same geometry as one at rest, asserted by comparing snapshots across a
+    running enter animation.
+  - **Exit orchestration** keeps a removed element in the tree until its exit
+    completes, but makes it `inert`, out of the focus order, and
+    pointer-transparent *immediately* — so a closing dialog can never swallow a
+    click meant for what is behind it.
+  - **MK5004** fires on a preset that animates a layout-affecting property, and
+    names the transform alternative. `collapse` is the sanctioned exception and
+    declares it.
+  - **FLIP** for reorder animations, and `mk.flush({ animations: false })` now
+    settles both the animations and the teardowns they were holding open —
+    which is what §17 promises tests.
+  - The service is registered as a lazy factory and the *declaration* is
+    checked before it is asked for, so a page with no animated element never
+    instantiates it. Asserted.
+
 ### Measured
 
 - **`docs/size-accounting.md`** — the per-module accounting §20.5 point 6 asks

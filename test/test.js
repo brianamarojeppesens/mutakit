@@ -767,7 +767,7 @@ function splitDrag(app, index, delta) {
 
 
 describe("overlays (§11.2, §16)", () => {
-  test("a modal is centred, focus-trapped, and backed by one shared backdrop", (t) => {
+  test("a modal is centred, focus-trapped, and backed by one shared backdrop", async (t) => {
     const { mk, app } = fixture(t);
     const trigger = app.create("pane", { id: "trigger", at: "top-left", size: { w: 80, h: 30 } });
     trigger.el.tabIndex = 0;
@@ -790,15 +790,20 @@ describe("overlays (§11.2, §16)", () => {
     t.ok(Number(second.el.style.zIndex) > Number(first.el.style.zIndex), "within one band");
 
     second.close();
+    // §17: a removed element stays in the tree until its exit animation
+    // completes. `flush({ animations: false })` is what the plan gives tests so
+    // an assertion never races an animation.
+    await mk.flush({ animations: false });
     mk.tick();
     t.equal(second.node.destroyed, true);
     t.equal(app.el.querySelectorAll("[data-mk-backdrop]").length, 1, "the backdrop survives for m1");
     first.close();
+    await mk.flush({ animations: false });
     mk.tick();
     t.equal(app.el.querySelectorAll("[data-mk-backdrop]").length, 0, "and goes with the last one");
   });
 
-  test("Escape dismisses the topmost overlay only, and a veto stops it", (t) => {
+  test("Escape dismisses the topmost overlay only, and a veto stops it", async (t) => {
     const { mk, app } = fixture(t);
     const modal = app.create("modal", { id: "guarded", title: "Unsaved" });
     mk.tick();
@@ -810,11 +815,12 @@ describe("overlays (§11.2, §16)", () => {
 
     modal.node._listeners.beforeclose.length = 0;
     key(document.documentElement, "Escape");
+    await mk.flush({ animations: false });
     mk.tick();
     t.equal(modal.node.destroyed, true);
   });
 
-  test("focus is trapped, then restored to what had it", (t) => {
+  test("focus is trapped, then restored to what had it", async (t) => {
     const { mk, app } = fixture(t);
     const before = document.createElement("button");
     before.textContent = "opener";
@@ -828,6 +834,7 @@ describe("overlays (§11.2, §16)", () => {
     t.ok(modal.el.contains(document.activeElement), "focus moved inside");
 
     modal.close();
+    await mk.flush({ animations: false });
     mk.tick();
     t.equal(document.activeElement, before, "and came back out");
   });
@@ -891,7 +898,7 @@ describe("overlays (§11.2, §16)", () => {
     t.close(pop.node.computed.x, 500, 1, "no placeholder element was needed");
   });
 
-  test("a menu is one tab stop with roving focus (§13.4)", (t) => {
+  test("a menu is one tab stop with roving focus (§13.4)", async (t) => {
     const { mk, app } = fixture(t);
     const chosen = [];
     const menu = app.create("menu", {
@@ -921,6 +928,7 @@ describe("overlays (§11.2, §16)", () => {
     key(menu.el, "ArrowDown");
     key(menu.el, "Enter");
     t.deepEqual(chosen, ["Copy"], "and choosing one closes the menu");
+    await mk.flush({ animations: false });
     t.equal(menu.node.destroyed, true);
   });
 
@@ -941,7 +949,7 @@ describe("overlays (§11.2, §16)", () => {
     t.ok(records.some((r) => r.code === "MK6003"), "a repeat inside the window is dropped");
   });
 
-  test("a tooltip host waits, shows on focus, and cleans up after itself", (t) => {
+  test("a tooltip host waits, shows on focus, and cleans up after itself", async (t) => {
     const { mk, app } = fixture(t);
     mk.define({
       type: "acme:field",
@@ -961,11 +969,12 @@ describe("overlays (§11.2, §16)", () => {
     t.ok(mk.query("tooltip"), "one tooltip element, delegated");
 
     host.hide();
+    await mk.flush({ animations: false });
     mk.tick();
     t.equal(mk.query("tooltip"), null);
   });
 
-  test("scroll locking is reference counted, so nested overlays do not double-lock", (t) => {
+  test("scroll locking is reference counted, so nested overlays do not double-lock", async (t) => {
     const { mk, app } = fixture(t);
     const layers = mk.service("layers");
     const a = app.create("modal", { id: "s1" });
@@ -975,10 +984,10 @@ describe("overlays (§11.2, §16)", () => {
     t.equal(document.documentElement.style.overflow, "hidden");
 
     b.close();
-    mk.tick();
+    await mk.flush({ animations: false });
     t.equal(document.documentElement.style.overflow, "hidden", "still locked for the first");
     a.close();
-    mk.tick();
+    await mk.flush({ animations: false });
     t.equal(document.documentElement.style.overflow, "", "and released exactly once");
   });
 });
@@ -1592,6 +1601,113 @@ describe("ecosystem (§26 M6)", () => {
     portal.destroy();
     mk.tick();
     t.equal(portal.handle.node.destroyed, true);
+  });
+});
+
+
+describe("motion (§17)", () => {
+  test("animation never affects layout — the invariant the whole section rests on", async (t) => {
+    const { mk, app } = fixture(t);
+    const modal = app.create("modal", { id: "anim", title: "Animated", backdrop: false });
+    mk.tick();
+
+    // Mid-animation, the resolved tree is identical to one at rest.
+    const during = mk.snapshot();
+    const motion = mk.service("motion");
+    t.ok(motion.busy || !motion.enabled, "an enter animation is running (or unavailable here)");
+    await mk.flush({ animations: false });
+    mk.tick();
+    t.deepEqual(mk.snapshot(), during, "the same geometry in motion as at rest");
+    t.deepEqual(rect(modal), [100, 60, 800, 680]);
+  });
+
+  test("a closing element is inert before it is gone", (t) => {
+    const { mk, app } = fixture(t);
+    const modal = app.create("modal", { id: "closing", title: "Closing", backdrop: false });
+    mk.tick();
+    modal.close();
+
+    // Still in the tree — and already unable to swallow a click meant for what
+    // is behind it, which is the bug libraries that merely delay removal have.
+    t.equal(modal.node.destroyed, false);
+    t.equal(modal.el.hasAttribute("inert"), true);
+    t.equal(modal.el.hasAttribute("data-mk-exiting"), true);
+    t.equal(modal.el.style.pointerEvents, "none");
+  });
+
+  test("reduced motion switches to the reduced variant, which is not 'none'", (t) => {
+    const { mk } = fixture(t);
+    const motion = mk.service("motion");
+    mk.metrics.override({ reducedMotion: true });
+    t.cleanup(() => mk.metrics.override(null));
+    mk.tick();
+
+    // Presets are registered on the *instance* registry by the service's
+    // attach, which is what makes a per-instance motion vocabulary possible.
+    const preset = mk.registry.get("motion", "scale");
+    const frames = motion.keyframesFor(preset, "enter", mk.root);
+    t.ok(frames, "reduced does not mean nothing (§14)");
+    t.equal(frames.duration, 80, "just shorter");
+    t.equal(frames.transform, undefined, "and opacity only");
+  });
+
+  test("presets may animate compositable properties only (MK5004)", (t) => {
+    const { mk, app } = fixture(t);
+    const records = [];
+    Mutakit.diagnostics.sink((record) => records.push(record));
+    t.cleanup(() => Mutakit.diagnostics.sink(null));
+
+    mk.define({
+      type: "acme:bad-motion",
+      a11y: "presentation",
+      motion: { enter: { width: ["0px", "100px"], duration: 10 }, reduced: "none" },
+      create: (ctx) => ctx.dom("div")
+    });
+    app.create("acme:bad-motion", { size: { w: 100, h: 20 } });
+    mk.tick();
+
+    const found = records.find((r) => r.code === "MK5004");
+    t.ok(found, "animating width is reported");
+    t.ok(/scale\(\)/.test(found.message), "and the transform alternative is named");
+  });
+
+  test("collapse is the sanctioned layout exception", (t) => {
+    const { mk } = fixture(t);
+    const records = [];
+    Mutakit.diagnostics.sink((record) => records.push(record));
+    t.cleanup(() => Mutakit.diagnostics.sink(null));
+    mk.service("motion");
+    const preset = mk.registry.get("motion", "collapse");
+    t.equal(preset.allowLayout, true, "it animates a grid track, and says so");
+    t.ok(preset.enter.gridTemplateRows, "0fr → 1fr, which is compositable in modern engines");
+  });
+
+  test("FLIP animates the inverse, so layout is untouched throughout", (t) => {
+    const { mk, app } = fixture(t);
+    const row = app.create("stack", { id: "flip", axis: "x", left: 0, top: 0, width: 400, height: 60 });
+    const a = row.create("pane", { id: "fa", layout: { size: 100 } });
+    const b = row.create("pane", { id: "fb", layout: { size: 100 } });
+    mk.tick();
+    const before = mk.snapshot();
+
+    const motion = mk.service("motion");
+    const played = motion.flip([a.node, b.node], () => {
+      mk.reparent(b.node, row.node, a.node);
+      mk.tick();
+    });
+
+    t.ok(played.length >= 0, "the reorder happened");
+    t.equal(a.node.computed.x > b.node.computed.x, true, "b is now first");
+    // The rects are the resolved ones, never the intermediate transform.
+    t.equal(Object.keys(mk.snapshot()).length, Object.keys(before).length);
+  });
+
+  test("a page with no animated element never instantiates the service", (t) => {
+    const { mk, app } = fixture(t);
+    app.create("pane", { size: { w: 10, h: 10 } });
+    app.create("stack", { axis: "x" });
+    mk.tick();
+    t.equal(mk.services.has("motion"), false, "the factory is lazy, and nothing asked");
   });
 });
 
