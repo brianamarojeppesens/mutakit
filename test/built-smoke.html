@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>built bundle smoke</title>
+<style>html,body{margin:0;height:100%;font:13px ui-monospace,monospace}pre{padding:12px}</style>
+</head><body>
+<!--
+  Does the *built* artifact behave like the source?
+
+  The suite loads `source/` directly (§23.3), which is right for development and
+  means the bundle itself is never exercised by it. This page loads
+  `build/mutakit.min.js` — production, dev code stripped, CSS templates squeezed
+  — and asserts the things those transforms could plausibly break: geometry,
+  the stylesheet, and the token cascade.
+-->
+<pre id="out">running…</pre>
+<script src="/build/mutakit.min.js"></script>
+<script>
+const checks = [];
+function check(name, actual, expected) {
+  const ok = String(actual) === String(expected);
+  checks.push((ok ? "ok   " : "FAIL ") + name + " → " + actual + (ok ? "" : " (expected " + expected + ")"));
+}
+try {
+  const app = Mutakit.mount(document.body, { sizing: "fixed", size: { w: 1000, h: 800 } });
+  const [l, r] = app.split({ axis: "x", panes: [{ id: "l", size: 200, min: 100 }, { id: "r", size: "1fr" }] });
+  // Inside a pane, not beside the split's panes: a `surface` has no layer, so
+  // as a sibling it is simply a third pane — which is correct, and not what
+  // this check is about.
+  const surface = r.create("surface", { id: "m", size: { w: "80%", h: "85%" }, at: "center" });
+  const modal = Mutakit.create("modal", { id: "dlg", title: "Built", backdrop: false });
+  Mutakit.tick();
+
+  check("version", Mutakit.VERSION, "0.9.0");
+  check("split left width", Math.round(l.node.computed.w), 200);
+  check("split right width", Math.round(r.node.computed.w), 794);
+  check("surface is 80% of its pane", Math.round(surface.node.computed.w), Math.round(794 * 0.8));
+  check("and centred in it", Math.round(surface.node.computed.x), Math.round(794 * 0.1));
+  check("a modal is portalled, not a pane", Math.round(modal.node.computed.w), 800);
+  check("gutter cursor (base CSS survived)", getComputedStyle(document.querySelector(".mk-resizer")).cursor, "col-resize");
+  check("modal radius (element CSS survived)", getComputedStyle(modal.el).borderRadius, "10px");
+  check("accent token (tokens CSS survived)", getComputedStyle(app.el).getPropertyValue("--mk-color-accent").trim(), "#2563eb");
+  check("danger token is red-600", getComputedStyle(app.el).getPropertyValue("--mk-color-danger").trim(), "#dc2626");
+  check("dev prose stripped", /declares no a11y semantics/.test(document.currentScript.previousElementSibling.src || "") ? "leaked" : "stripped", "stripped");
+  check("modal role", modal.el.getAttribute("role"), "dialog");
+} catch (error) {
+  checks.push("FAIL threw → " + error.message);
+}
+const failed = checks.filter((line) => line.startsWith("FAIL"));
+document.getElementById("out").textContent = checks.join("\n") + "\n\n" + (failed.length ? failed.length + " failed" : "all passed");
+document.documentElement.dataset.smoke = failed.length ? "fail" : "pass";
+window.__smoke = { checks, failed: failed.length };
+</script>
+</body></html>

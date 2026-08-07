@@ -37,10 +37,110 @@ const PRESETS = [
 const banner = (name) =>
   `/*! Mutakit ${pkg.version} — ${name} · ${pkg.license} · https://mutakit.dev */`;
 
+/**
+ * The UMD tail for the `<script>`-tag build (§1.4, §25.5).
+ *
+ * `globalName` assigns the module's **exports object**, so the global would be
+ * `{ Mutakit, splitsPlugin, default }` and `Mutakit.mount` would not exist —
+ * the single-tag path, which the design calls non-negotiable, was broken in
+ * every build. Nothing caught it because the test suite loads `source/`
+ * directly, which is the right default and exactly why this artifact needs its
+ * own smoke page (`test/built-smoke.html`).
+ *
+ * Unwrapping the named export first keeps `Mutakit.mount(…)` working while the
+ * plugin exports stay reachable as properties of it.
+ */
+function umdFooter(global) {
+  // `default` on an ES-module exports object is a getter-only property, so
+  // `Object.assign` onto the namespace throws — silently, inside the IIFE,
+  // leaving the global as the exports object. Copying by name and skipping the
+  // two self-references is the version that survives.
+  return (
+    `${global}=function(m){var n=m&&m.${global}?m.${global}:m;` +
+    `for(var k in m){if(k!=="default"&&k!=="${global}"&&!(k in n)){try{n[k]=m[k]}catch(e){}}}` +
+    `return n}(${global});` +
+    `if(typeof module==="object"&&module.exports){module.exports=${global}}` +
+    `else if(typeof define==="function"&&define.amd){define([],function(){return ${global}})}`
+  );
+}
+
 const argv = new Set(process.argv.slice(2));
 const WATCH = argv.has("--watch");
 const CHECK = argv.has("--check");
 const STRICT = argv.has("--strict-budget");
+
+/**
+ * Minify the contents of `css` tagged templates.
+ *
+ * Stylesheets ship as JavaScript strings (§20.5), which means esbuild never
+ * sees them as CSS: every explanatory `/* … *\/` comment and every line of
+ * indentation reaches the user verbatim. This strips comments and collapses
+ * whitespace inside `css` templates only, leaving `${…}` interpolations and
+ * all other template literals untouched.
+ *
+ * The comments are worth writing and worth not shipping — the same argument as
+ * dev-only diagnostics, applied to the one place the bundler cannot reach.
+ */
+const minifyCSSTemplates = {
+  name: "mutakit-css-templates",
+  setup(build) {
+    build.onLoad({ filter: /source[\\/].*\.js$/ }, async (args) => {
+      const source = await readFile(args.path, "utf8");
+      if (!source.includes("css`") && !source.includes("styles: `")) return null;
+      return { contents: squeezeTemplates(source), loader: "js" };
+    });
+  }
+};
+
+/** Rewrite each `css` / `styles: ` template in place, preserving offsets' meaning. */
+function squeezeTemplates(source) {
+  let out = "";
+  let index = 0;
+  // `(?<![.\w])` matters: `` `layout:${name}.css` `` contains "css" followed
+  // by a backtick and would otherwise be read as the start of a template.
+  const opener = /(?:(?<![.\w])css|^\s*styles:\s*)`/gm;
+  let match;
+  while ((match = opener.exec(source))) {
+    const start = match.index + match[0].length;
+    const end = findTemplateEnd(source, start);
+    if (end === -1) break;
+    out += source.slice(index, start) + squeezeCSS(source.slice(start, end));
+    index = end;
+    opener.lastIndex = end;
+  }
+  return out + source.slice(index);
+}
+
+/** The matching backtick, skipping `${…}` substitutions and escapes. */
+function findTemplateEnd(source, start) {
+  for (let i = start; i < source.length; i++) {
+    const character = source[i];
+    if (character === "\\") {
+      i++;
+    } else if (character === "$" && source[i + 1] === "{") {
+      let depth = 1;
+      i += 2;
+      while (i < source.length && depth > 0) {
+        if (source[i] === "{") depth++;
+        else if (source[i] === "}") depth--;
+        i++;
+      }
+      i--;
+    } else if (character === "`") {
+      return i;
+    }
+  }
+  return -1;
+}
+
+function squeezeCSS(text) {
+  return text
+    .replace(/\/\*(?![^]*?\$\{)[^]*?\*\//g, "")
+    .replace(/\s+/g, " ")
+    .replace(/\s*([{};:,>])\s*/g, "$1")
+    .replace(/;}/g, "}")
+    .trim();
+}
 
 /**
  * Shared options. The split above is what §21.1's two builds rest on:
@@ -56,20 +156,14 @@ function options(preset, { format, minify }) {
     target: ["chrome111", "firefox113", "safari16.4"],
     platform: "browser",
     globalName: format === "iife" ? manifest.global : undefined,
-    footer:
-      format === "iife"
-        ? {
-            // The UMD output shape survives the migration (§2.2): the bundler
-            // emits it rather than a hand-written wrapper.
-            js: `if(typeof module==="object"&&module.exports){module.exports=${manifest.global}}else if(typeof define==="function"&&define.amd){define([],function(){return ${manifest.global}})}`
-          }
-        : undefined,
+    footer: format === "iife" ? { js: umdFooter(manifest.global) } : undefined,
     minify,
     sourcemap: minify ? false : "linked",
     metafile: true,
     legalComments: "inline",
     banner: { js: banner(preset.label) },
     define: { __MK_DEV__: String(!minify) },
+    plugins: minify ? [minifyCSSTemplates] : [],
     drop: minify ? ["debugger"] : [],
     loader: { ".css": "text" },
     write: !CHECK,
@@ -110,6 +204,13 @@ async function buildAll() {
     }
   }
 
+  // Types are part of the shipped artifact set (§22.5, §25.5), and the build
+  // starts by deleting `build/` — so generating them separately meant every
+  // `npm run build` silently removed the `.d.ts` a previous `npm run types`
+  // had produced, and `tsc --noEmit` then failed against a package with no
+  // types at all.
+  await generateTypes();
+
   const report = {
     name: pkg.name,
     version: pkg.version,
@@ -130,15 +231,26 @@ async function buildAll() {
  * projection.
  */
 function moduleSizes(outputs) {
-  const target = Object.keys(outputs).find((k) => k.endsWith("mutakit.min.js"));
-  if (!target) return {};
-  const inputs = outputs[target].inputs || {};
-  const byGroup = {};
-  for (const [file, info] of Object.entries(inputs)) {
-    const group = file.split("/").slice(1, 3).join("/");
-    byGroup[group] = (byGroup[group] || 0) + info.bytesInOutput;
+  const report = {};
+  for (const [file, output] of Object.entries(outputs)) {
+    if (!file.endsWith(".min.js") || file.includes(".esm.")) continue;
+    const preset = path.basename(file, ".min.js");
+    const byModule = {};
+    for (const [input, info] of Object.entries(output.inputs || {})) {
+      byModule[input.replace(/^source\//, "")] = info.bytesInOutput;
+    }
+    report[preset] = Object.fromEntries(Object.entries(byModule).sort((a, b) => b[1] - a[1]));
   }
-  return Object.fromEntries(Object.entries(byGroup).sort((a, b) => b[1] - a[1]));
+  return report;
+}
+
+/** Run the type generator in-process, so one command produces one artifact set. */
+async function generateTypes() {
+  const { execFileSync } = await import("node:child_process");
+  execFileSync(process.execPath, [path.join(ROOT, "tools/gen-types.mjs")], {
+    cwd: ROOT,
+    stdio: "pipe"
+  });
 }
 
 async function gzipSize(text) {

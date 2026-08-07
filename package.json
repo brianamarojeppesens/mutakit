@@ -43,7 +43,7 @@
     "build:watch": "node build.mjs --watch",
     "check": "node build.mjs --check",
     "lint": "node tools/lint-arch.mjs",
-    "types": "node tools/gen-types.mjs && tsc --noEmit",
+    "types": "node build.mjs && tsc --noEmit",
     "docs": "node tools/gen-docs.mjs",
     "test:unit": "node --test test/unit/",
     "test:browser": "node tools/serve.mjs --run",

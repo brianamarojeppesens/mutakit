@@ -28,7 +28,12 @@ function fixture(t, options) {
 describe("kernel", () => {
   test("the namespace exposes a version and the geometry primitives", (t) => {
     t.equal(typeof Mutakit.VERSION, "string");
-    t.ok(Mutakit.geometry.Len.parse, "Len is published for plugin authors");
+    // A curated surface, not four namespace objects: re-exporting whole
+    // modules pinned every export of each into every bundle (§10 lists what is
+    // extensible; this was never on it).
+    t.ok(Mutakit.geometry.parse, "the Len parser is published for plugin authors");
+    t.ok(Mutakit.geometry.place && Mutakit.geometry.intersect, "with the rect and anchor helpers");
+    t.equal(Mutakit.geometry.union, undefined, "and nothing beyond what a plugin needs");
     t.ok(Mutakit.signal, "signals are part of the surface");
   });
 

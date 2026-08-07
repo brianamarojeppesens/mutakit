@@ -301,7 +301,6 @@ export class MutakitInstance extends Kernel {
         this.guard(target, `trait:${record.trait.name}.detach`, record.trait.detach, [ctx, record.api]);
       }
     }
-    target.traits.clear();
 
     for (const hook of target.definition ? target.definition.hooks.destroy : []) {
       this.guard(target, "destroy", hook, [ctx]);
@@ -309,6 +308,12 @@ export class MutakitInstance extends Kernel {
 
     this.measurer.unobserve(target);
     target.releaseOwned();
+    // Cleared *after* the disposers, not before. A trait's cleanup routinely
+    // emits one of its own declared events — `tooltip-host` hides its tooltip
+    // — and clearing first makes every such emit an undeclared one (MK3003).
+    // The disposer guard swallowed the throw, so the tooltip simply never
+    // announced that it had gone.
+    target.traits.clear();
     if (target.id && this.ids.get(target.id) === target) this.ids.delete(target.id);
     if (target.definition) {
       const count = this._instanceCounts.get(target.type) || 0;
@@ -1120,11 +1125,25 @@ export class MutakitInstance extends Kernel {
 
     if (resolved && node.children.length) {
       const ctx = makeLayoutContext(node, this);
+      // Overlays are portalled to their layer (§16.2), so the parent's
+      // algorithm never sees them. Without this a `modal` created under a
+      // `split` becomes a *pane*: it takes a track, and every real pane
+      // shrinks to make room for it. The layer band already governs where it
+      // sits; the parent's tracks have nothing to say about it.
+      const inFlow = node.children.filter((child) => !isPortalled(child));
+      const portalled = node.children.filter(isPortalled);
       this.guard(node, `layout:${resolved.name}.arrange`, resolved.arrange || noop, [
         node,
-        node.children,
+        inFlow,
         ctx
       ]);
+      // A portalled child resolves against the frame of the root it belongs
+      // to, which is what makes `of: 'viewport'` correct however deeply the
+      // overlay was declared (§5.11 rule 3).
+      for (const child of portalled) {
+        const host = child.root || node;
+        this.resolveBox(child, host.frame, host);
+      }
       if (resolved.css) {
         const styles = this.guard(node, `layout:${resolved.name}.css`, resolved.css, [node, ctx]);
         if (styles) for (const key of Object.keys(styles)) this.compiler.setStyle(node, key, styles[key]);
@@ -1331,6 +1350,13 @@ const ADOPTED_DEFINITION = {
 };
 
 function noop() {}
+
+/** Layers at or above `overlay` sit outside the parent's flow entirely. */
+const PORTALLED_LAYERS = new Set(["overlay", "modal", "popover", "tooltip", "toast", "devtools"]);
+
+function isPortalled(node) {
+  return !!node.layer && PORTALLED_LAYERS.has(node.layer);
+}
 
 /** A container's frame with only the inset contributions `filter` names. */
 function frameWithInsets(parent, metrics, filter) {

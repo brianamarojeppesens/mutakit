@@ -9,6 +9,7 @@
  * Findings are returned, not thrown: a definition with a warning still works,
  * and the caller decides how loud to be.
  */
+import "./dev.js";
 
 const POINTER_TRAIT_HINT =
   "every pointer interaction needs a documented keyboard equivalent (P5, §13.4)";
@@ -22,6 +23,12 @@ function finding(level, code, message) {
  * `resolved` may be omitted when checking a definition in isolation.
  */
 export function conformance(definition, resolved) {
+  // An early return the bundler can see. Marking the *call sites* dev-only is
+  // not enough: esbuild computes reachability before it folds constants, so
+  // the module stays imported and every message in it ships. Pruning from
+  // inside the function is what actually removes them — measured, and the same
+  // shape `dev.js` documents for the branch case.
+  if (!__MK_DEV__) return [];
   const findings = [];
   if (!definition || typeof definition !== "object") {
     return [finding("error", "MK3002", "not a definition object")];
@@ -161,6 +168,7 @@ function collectEmitted(definition) {
 
 /** Same idea for traits (§9), which share the contract's shape. */
 export function conformanceTrait(trait) {
+  if (!__MK_DEV__) return [];
   const findings = [];
   if (!trait || !trait.name) return [finding("error", "MK3002", "a trait needs a `name`")];
   const declared = new Set(trait.events || []);

@@ -16,10 +16,10 @@ import { setDiagnosticSink, resetDiagnostics, CATALOGUE } from "./core/diagnosti
 import { batch, computed, effect, signal, untrack } from "./core/signals.js";
 import { setClock, counters } from "./core/dom.js";
 import { MutakitInstance } from "./engine/instance.js";
-import * as Len from "./geometry/len.js";
-import * as Rect from "./geometry/rect.js";
-import * as Anchor from "./geometry/anchor.js";
-import * as Spaces from "./geometry/spaces.js";
+import { parse, toCSS, toNumber } from "./geometry/len.js";
+import { clamp, containsPoint, intersect, rect } from "./geometry/rect.js";
+import { place, resolveAnchor } from "./geometry/anchor.js";
+import { convertPoint } from "./geometry/spaces.js";
 
 /** A registry-only kernel, so `Mutakit.define()` works before any instance. */
 class GlobalKernel extends MutakitInstance {
@@ -119,9 +119,31 @@ export const Mutakit = {
   tick: (time) => instance().tick(time),
   flush: (options) => instance().flush(options),
 
-  // ── Geometry, published because plugins need it (§10) ────────────────
-  geometry: { Len, Rect, Anchor, Spaces },
-  convert: (p, from, to, refs) => Spaces.convertPoint(p, from, to, refs),
+  /**
+   * A *curated* geometry surface.
+   *
+   * Deliberately not `{ Len, Rect, Anchor, Spaces }` as namespace objects. A
+   * re-exported namespace is a live binding to every export of its module, so
+   * that spelling pinned a dozen functions core never calls into every bundle
+   * — `outset`, `union`, `containsRect`, `invertMatrix`, and the rest. It also
+   * published a surface §10's complete list of extension points never promised,
+   * on top of §8.2's "ctx is the only surface a plugin sees".
+   *
+   * What is here is what a plugin plausibly needs and nothing else. Anything
+   * further should arrive as a named extension point, not by widening this.
+   */
+  geometry: {
+    parse,
+    toCSS,
+    toNumber,
+    rect,
+    intersect,
+    clamp,
+    containsPoint,
+    resolveAnchor,
+    place
+  },
+  convert: (p, from, to, refs) => convertPoint(p, from, to, refs),
 
   /**
    * Run a definition against the contract (§8.7).
