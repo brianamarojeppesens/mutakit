@@ -997,6 +997,34 @@ describe("persistence (§19)", () => {
 });
 
 describe("leaks (§23.5)", () => {
+  /**
+   * Wait for `counters.timers` to come back to `baseline`, then report it.
+   *
+   * Not every live timer belongs to a node. The announcer (§14) rate-limits
+   * through a shared 500 ms timer owned by the service, so anything that calls
+   * `ctx.announce` leaves one in flight for half a second — and a `toast`
+   * announces on create. Sampling the count at an arbitrary instant after the
+   * work is done therefore measures whether that half-second happened to have
+   * elapsed, which is a property of the clock, not of the library.
+   *
+   * That is why this passed in a visible browser and failed in all three
+   * headless engines: `flush` waits on rAF, a visible browser paces rAF to the
+   * display at ~16.7 ms a frame, and headless runs it flat out. The slow one
+   * spent longer than 500 ms getting to the assertion. Neither was measuring a
+   * leak.
+   *
+   * Polling keeps the detection intact rather than widening the target: a
+   * timer that genuinely outlives its owner never returns to baseline, so it
+   * still fails — after the budget, and with the real count in the message.
+   */
+  async function settleTimers(baseline, budget = 2000) {
+    const deadline = Date.now() + budget;
+    while (counters.timers !== baseline && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    return counters.timers;
+  }
+
   test("create and destroy 200 elements, and every counter returns to baseline", (t) => {
     const { mk, app } = fixture(t);
     mk.tick();
@@ -1105,7 +1133,7 @@ describe("leaks (§23.5)", () => {
       await mk.flush({ animations: false });
     }
     mk.tick();
-    t.equal(counters.timers, baseline, "timers return to baseline, not below it");
+    t.equal(await settleTimers(baseline), baseline, "timers return to baseline, not below it");
 
     // And a timer created *inside* an owned listener is owned too — otherwise
     // it survives its element and is invisible to this count.
@@ -1115,8 +1143,7 @@ describe("leaks (§23.5)", () => {
     input.dispatchEvent(new FocusEvent("blur", { bubbles: true }));
     mk.destroy(combo.node);
     await mk.flush({ animations: false });
-    await new Promise((resolve) => setTimeout(resolve, 160));
-    t.equal(counters.timers, baseline, "a blur timer does not outlive its combobox");
+    t.equal(await settleTimers(baseline), baseline, "a blur timer does not outlive its combobox");
   });
 
   test("an unowned listener is rejected at define(), before it can leak (P7)", (t) => {
