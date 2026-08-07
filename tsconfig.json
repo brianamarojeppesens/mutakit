@@ -1,0 +1,20 @@
+{
+  "//": "Types are verified by `tsc --noEmit` over examples/ (§22.5). A type regression fails the build.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "allowJs": true,
+    "checkJs": false,
+    "isolatedModules": true,
+    "forceConsistentCasingInFileNames": true,
+    "paths": {
+      "mutakit": ["./build/mutakit.d.ts"]
+    }
+  },
+  "include": ["examples/**/*.ts", "source/types/*.d.ts", "build/mutakit.d.ts"]
+}

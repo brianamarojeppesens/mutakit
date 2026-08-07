@@ -1,28 +1,29 @@
 {
   "name": "mutakit",
   "title": "Mutakit",
-  "description": "A mutable UI scaffold developed in javascript.",
-  "version": "0.2.0",
+  "description": "A dependency-free browser library that builds and mutates graphical user interfaces from declarative geometry.",
+  "version": "0.4.0",
   "kind": "library",
   "author": "Brian Amaro-Jeppesen",
   "created": "2026-07-25",
   "global": "Mutakit",
   "source": {
     "dir": "source",
-    "entry": "source/mutakit.js",
-    "files": [
-      "source/mutakit.js"
-    ]
+    "entry": "source/entries/full.js",
+    "note": "The ordered file list is gone: the ES module import graph supersedes it, and build/manifest.json reports what actually shipped after tree-shaking (PLAN.md §22.1)."
   },
   "build": {
     "dir": "build",
     "expanded": "build/mutakit.js",
     "minified": "build/mutakit.min.js",
-    "command": "python3 build.py"
+    "manifest": "build/manifest.json",
+    "command": "npm run build"
   },
   "test": {
     "dir": "test",
     "entry": "test/index.html",
-    "port": 8080
+    "unit": "npm run test:unit",
+    "port": 8080,
+    "note": "ES modules are fetched, so the harness must be served — `npm run serve`."
   }
 }

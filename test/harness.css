@@ -95,6 +95,46 @@ code {
   padding: 0;
 }
 
+.results li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.55rem 0 0.55rem 1.5rem;
+  border-top: 1px solid var(--line);
+  position: relative;
+}
+
+.results li:first-child { border-top: 0; }
+
+.results li::before {
+  position: absolute;
+  left: 0;
+  font-weight: 700;
+}
+
+.results li.pass::before { content: "\2713"; color: var(--pass); }
+.results li.fail::before { content: "\2715"; color: var(--fail); }
+.results li.skip::before { content: "\2013"; color: var(--muted); }
+.results li.skip .name { color: var(--muted); }
+
+.results .why {
+  color: var(--fail);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.82rem;
+}
+
+/* Tests mount here and clean up after themselves. */
+#scratch {
+  position: relative;
+  min-height: 1px;
+}
+
+.harness-sandbox {
+  position: absolute;
+  left: -20000px;
+  top: 0;
+}
+
 .result {
   display: flex;
   flex-direction: column;

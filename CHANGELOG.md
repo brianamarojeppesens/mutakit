@@ -4,7 +4,122 @@ All notable changes to Mutakit are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.4.0] — M1: geometry and engine
+
+`Len`, rect algebra, anchors, edge constraints, insets, coordinate spaces, the
+node tree, invalidation, the frame loop, the metrics snapshot, the style
+compiler, and the `anchor` and `stack` algorithms (PLAN.md §26 M1).
+
+### Added
+
+- **The geometry model** (§5). `Len` parses to an AST compiled by two backends —
+  `toCSS` for the common path, `toNumber` only when interaction needs a number —
+  which is what lets P1 hold without duplicating the unit vocabulary. Rect
+  algebra, anchor resolution with logical spellings, edge constraints with
+  priority-based over-constraint resolution, the inset stack, and coordinate
+  spaces with matrix composition.
+- **The layout engine** (§6). Retained node tree, four independent dirty bits
+  with distinct propagation rules, a seven-phase frame loop that unschedules
+  itself when idle, the once-per-frame metrics snapshot, three-strategy
+  measurement, and a style compiler that diffs before writing.
+- **`anchor` and `stack`** (§7.1, §7.2), plus the five Tier A element types.
+- **Layout snapshot testing** (§23.2) — a resolved tree dumps as
+  `{ key: [x, y, w, h] }` and compares against readable numbers.
+
+### Measured
+
+- **Core is 31.8 KB gzipped against §20.1's 8.5 KB budget — 3.7x over**, and
+  `mutakit.js` is 31.8 KB against 32 KB. Recorded here rather than absorbed as a
+  quiet budget revision, which is what §20.5 finding 6 asks for. The estimate
+  budgeted the kernel group (kernel, diagnostics, events, DOM adapter) at 5.3 KB
+  minified; the implementation is 11.4 KB *after* stripping dev prose. The two
+  modules §20.5 named as the ones to watch were right — `geometry/len` is 8.4 KB
+  minified, the second largest — but the largest by far is `engine/instance` at
+  18.6 KB, which the per-module table had no row for because the estimate split
+  that work across `kernel` and six engine modules. A reduction pass belongs
+  after the catalog exists (M6), when presets are load-bearing rather than
+  identical; until then `npm run build` reports the number on every build and
+  `--strict-budget` fails, which the release checklist passes.
+- Dev-message stripping is worth **6.4 KB minified / 2.4 KB gzipped** on its
+  own, measured by toggling it.
+
+### Fixed
+
+- `calc(100% - 32px)` and every other subtraction failed to parse and silently
+  fell back to `auto`. A leading `-` was treated as the start of an identifier
+  (correct for `--custom-property`, wrong for subtraction), so the whole
+  expression was rejected. Caught by the first run of the `Len` suite — the same
+  lesson §22.6 records: run the thing, don't cite it.
+- Signals ran an effect twice per write. Recomputing a `computed` during a pull
+  re-marked its dependents, re-queueing the effect that had triggered the pull.
+  Freshness now travels by version comparison and `update()` is strictly
+  pull-only.
+- A trait's declared events were invisible to `ctx.emit`, so every
+  trait-emitted event was reported as a contract violation (MK3003) — exactly
+  backwards, since traits are the primary reuse mechanism.
+
+## [0.3.0] — M0: foundation
+
+Replaces the scaffold. The kernel, registries, diagnostics, error isolation,
+node identity, the event system, and the DOM adapter, plus the whole draft-7
+toolchain migration (PLAN.md §26 M0).
+
+### Added
+
+- **The plugin contract** (§8): `define`/`trait`/`layout`/`unit`, `extends`
+  resolution with chained lifecycle hooks, `ctx` as the only surface a plugin
+  sees, per-instance registries inheriting a global one by reference, SemVer
+  `requires` checking, and `uninstall` semantics that deregister contributions
+  without destroying live elements.
+- **Error isolation** (§8.10). Every lifecycle hook runs inside a guard; a
+  throw marks the node, replaces its subtree with a placeholder **preserving
+  the declared geometry**, reports MK3007 with the owning plugin's identity,
+  and fires an `error` event that bubbles the node tree.
+- **Diagnostics** (§21.2) — 43 stable codes, de-duplicated by code plus
+  subject, each with a documented cause and fix in `docs/diagnostics.md`.
+- **Signals** (§15.1), scheduled into the frame loop's STATE phase.
+- **Conformance checking** (§8.7), run automatically on every `define()` in the
+  development build and published for plugin authors to use as a test.
+- **The harness upgrades** (§23.1): async tests, `describe`, `setup`/`teardown`,
+  `only`/`skip`, `?filter=`, a deterministic fake clock and fake rAF, synthetic
+  pointer traces, and machine-readable results on `window.harness`.
+- **Generated types and docs** (§22.5, §24) from the same prop schemas that
+  drive validation and devtools, verified by `tsc --noEmit` over `examples/`.
+
+### Changed
+
+- **The toolchain moved to Node** (§22.2, §22.3, §23.3). `package.json` with a
+  committed lockfile; `build.mjs` on esbuild emitting IIFE and ESM, expanded and
+  minified, with source maps and a metafile-derived `build/manifest.json`;
+  plain ESM source in place of the IIFE registry; Playwright wired to the §25.3
+  baseline engines; the Python tools ported to Node.
+- **`docs/diagnostics.md` is now load-bearing**, not documentation: the lint
+  fails if a code is used without being catalogued *and* documented.
+
+### Removed
+
+- **`hello()` and the 0.2.0 scaffold API** — breaking, and the reason M0 bumps
+  the minor rather than the patch. `source/mutakit.js`, the UMD wrapper, and the
+  four starter tests are gone; the UMD *output shape* survives, emitted by the
+  bundler.
+- **`build.py` and `tools/test_build.py`** (§22.3). Both were good work — the
+  probe caught a real bug that silently deleted code from minified output — but
+  the class of bug they defended against belongs to esbuild now. The record of
+  why they existed stays in PLAN.md §22.6 and below.
+- **`unpinned.json`'s ordered `source.files` array.** The ES module import graph
+  supersedes it, which removes that merge-conflict surface entirely rather than
+  merely making it tolerable.
+
+### Fixed
+
+- Dev-only code was shipping in the production bundle. Three spellings of the
+  build flag were measured against esbuild: an imported constant — computed
+  *or* literal — is folded to `!1` but the branch is **kept**, so every dev-only
+  message string shipped behind `if (!1)`. Only a bare `define`d identifier
+  prunes the branch and tree-shakes what it referenced. The gate is now
+  `if (__MK_DEV__)`, and `source/core/dev.js` records the measurement.
+
+## [Unreleased] — pre-implementation history
 
 The project has stayed on the 0.2.0 scaffold throughout, so nothing here changes the shipped
 API and there is no version bump. PLAN.md is the design source of truth, and its six drafts

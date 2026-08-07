@@ -9,17 +9,18 @@
 <body>
   <header class="harness-header">
     <h1>Mutakit</h1>
-    <p class="tagline">A mutable UI scaffold developed in javascript.</p>
+    <p class="tagline">Declarative geometry for graphical user interfaces.</p>
     <p class="source-note">
-      loading <code id="source-label">../source/mutakit.js</code>
-      — switch to <code>../build/mutakit.min.js</code> to verify a release
+      loading <code>../source/entries/full.js</code> as ES modules —
+      this page <strong>must be served</strong>, not opened over <code>file://</code>
     </p>
   </header>
 
   <main>
-    <!-- Scratch area: drop markup here for whatever this project needs. -->
     <section class="panel" id="sandbox">
       <h2>Sandbox</h2>
+      <!-- Tests mount into #scratch and clean up after themselves. -->
+      <div id="scratch"></div>
       <div id="demo"></div>
     </section>
 
@@ -29,11 +30,6 @@
     </section>
   </main>
 
-  <!-- Library under test. Swap this line to test the build output instead. -->
-  <script src="../source/mutakit.js"></script>
-  <!-- Tiny assertion helper. Rarely needs editing. -->
-  <script src="harness.js"></script>
-  <!-- Your tests. This is the file to customise per project. -->
-  <script src="test.js"></script>
+  <script type="module" src="test.js"></script>
 </body>
 </html>

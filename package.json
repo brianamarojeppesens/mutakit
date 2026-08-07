@@ -1,0 +1,62 @@
+{
+  "name": "mutakit",
+  "version": "0.4.0",
+  "description": "A dependency-free browser library that builds and mutates graphical user interfaces from declarative geometry.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Brian Amaro-Jeppesen",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22.12"
+  },
+  "files": [
+    "build/",
+    "source/"
+  ],
+  "main": "./build/mutakit.esm.js",
+  "types": "./build/mutakit.d.ts",
+  "exports": {
+    ".": {
+      "types": "./build/mutakit.d.ts",
+      "import": "./build/mutakit.esm.js"
+    },
+    "./core": {
+      "types": "./build/mutakit.d.ts",
+      "import": "./build/mutakit.core.esm.js"
+    },
+    "./app": {
+      "types": "./build/mutakit.d.ts",
+      "import": "./build/mutakit.app.esm.js"
+    },
+    "./dock": {
+      "types": "./build/mutakit.d.ts",
+      "import": "./build/mutakit.dock.esm.js"
+    },
+    "./hud": {
+      "types": "./build/mutakit.d.ts",
+      "import": "./build/mutakit.hud.esm.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "build:watch": "node build.mjs --watch",
+    "check": "node build.mjs --check",
+    "lint": "node tools/lint-arch.mjs",
+    "types": "node tools/gen-types.mjs && tsc --noEmit",
+    "docs": "node tools/gen-docs.mjs",
+    "test:unit": "node --test test/unit/",
+    "test:browser": "node tools/serve.mjs --run",
+    "test": "npm run test:unit && npm run lint && npm run build && npm run test:browser",
+    "serve": "node tools/serve.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1",
+    "esbuild": "0.28.1",
+    "typescript": "7.0.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/brianamarojeppesen/mutakit.git"
+  }
+}

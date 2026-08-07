@@ -1,123 +1,378 @@
 /**
- * Minimal test harness — no dependencies, no build step.
+ * The browser test harness (§23.1).
  *
- *   test("description", function (t) {
- *     t.equal(actual, expected, "optional message");
- *     t.ok(value);
- *     t.throws(function () { ... });
+ * Kept rather than replaced with a general-purpose runner, and the reason is
+ * specific: the tests that matter most here are layout snapshots and synthetic
+ * interaction sequences against *real* layout. They need a real browser, not a
+ * simulated DOM, and this harness's value is that it runs in the page under
+ * test with nothing in between. What Node buys the browser tier is the driver
+ * (§23.3), not the runner.
+ *
+ *   describe("geometry", () => {
+ *     test("resolves", async (t) => { t.equal(a, b); });
  *   });
  *
- * Results render into #results; the summary lands in #summary. Also exposed as
- * window.harness.results for programmatic checks.
+ * Results land on `window.harness.results` for external drivers, and
+ * `?filter=` narrows a run without editing anything.
  */
-(function (global) {
-  "use strict";
 
-  var queue = [];
-  var results = [];
+const queue = [];
+const stack = [];
+const state = {
+  results: [],
+  running: false,
+  done: false,
+  only: false,
+  filter: new URLSearchParams(location.search).get("filter") || ""
+};
 
-  function Assert() {
+class Assert {
+  constructor(name) {
+    this.name = name;
     this.assertions = [];
+    this.disposers = [];
   }
 
-  Assert.prototype._record = function (passed, message) {
-    this.assertions.push({ passed: passed, message: message });
-    if (!passed) throw new Error(message);
-  };
+  _record(passed, message) {
+    this.assertions.push({ passed, message });
+    if (!passed) {
+      const error = new Error(message);
+      error.assertion = true;
+      throw error;
+    }
+  }
 
-  Assert.prototype.ok = function (value, message) {
-    this._record(!!value, message || "expected a truthy value, got " + format(value));
-  };
+  ok(value, message) {
+    this._record(!!value, message || `expected a truthy value, got ${format(value)}`);
+  }
 
-  Assert.prototype.equal = function (actual, expected, message) {
+  notOk(value, message) {
+    this._record(!value, message || `expected a falsy value, got ${format(value)}`);
+  }
+
+  equal(actual, expected, message) {
     this._record(
-      actual === expected,
-      message || "expected " + format(expected) + ", got " + format(actual)
+      Object.is(actual, expected),
+      message || `expected ${format(expected)}, got ${format(actual)}`
     );
-  };
+  }
 
-  Assert.prototype.deepEqual = function (actual, expected, message) {
+  notEqual(actual, expected, message) {
+    this._record(!Object.is(actual, expected), message || `expected not ${format(expected)}`);
+  }
+
+  /** Numeric comparison with a tolerance — sub-pixel rounding is not a bug. */
+  close(actual, expected, epsilon, message) {
+    const tolerance = epsilon == null ? 0.5 : epsilon;
     this._record(
-      JSON.stringify(actual) === JSON.stringify(expected),
-      message || "expected " + format(expected) + ", got " + format(actual)
+      Math.abs(actual - expected) <= tolerance,
+      message || `expected ${expected} ± ${tolerance}, got ${actual}`
     );
-  };
+  }
 
-  Assert.prototype.throws = function (fn, message) {
-    var threw = false;
-    try { fn(); } catch (e) { threw = true; }
-    this._record(threw, message || "expected the function to throw");
-  };
+  deepEqual(actual, expected, message) {
+    const a = JSON.stringify(actual);
+    const b = JSON.stringify(expected);
+    this._record(a === b, message || `expected ${b}, got ${a}`);
+  }
 
-  function format(value) {
+  throws(fn, pattern, message) {
+    let threw = null;
     try {
-      return typeof value === "string" ? '"' + value + '"' : JSON.stringify(value);
-    } catch (e) {
+      fn();
+    } catch (error) {
+      threw = error;
+    }
+    if (!threw) {
+      this._record(false, message || "expected the call to throw");
+      return null;
+    }
+    if (pattern instanceof RegExp) {
+      this._record(
+        pattern.test(threw.message),
+        message || `expected a message matching ${pattern}, got ${JSON.stringify(threw.message)}`
+      );
+    } else {
+      this._record(true, message || "threw");
+    }
+    return threw;
+  }
+
+  /** Register cleanup for this test. Runs even when the test fails. */
+  cleanup(fn) {
+    this.disposers.push(fn);
+    return fn;
+  }
+
+  /** A fresh detached container, removed automatically. */
+  sandbox() {
+    const el = document.createElement("div");
+    el.className = "harness-sandbox";
+    document.getElementById("scratch").appendChild(el);
+    this.cleanup(() => el.remove());
+    return el;
+  }
+}
+
+function format(value) {
+  if (typeof value === "string") return JSON.stringify(value);
+  if (value === undefined) return "undefined";
+  if (value === null) return "null";
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch (error) {
       return String(value);
     }
   }
+  return String(value);
+}
 
-  function test(name, fn) {
-    queue.push({ name: name, fn: fn });
+function fullName(name) {
+  return [...stack, name].join(" › ");
+}
+
+/** Group tests. Groups nest, and the joined name is what `?filter=` matches. */
+export function describe(name, fn) {
+  stack.push(name);
+  try {
+    fn();
+  } finally {
+    stack.pop();
+  }
+}
+
+export function test(name, fn, options) {
+  queue.push({ name: fullName(name), fn, ...(options || {}) });
+}
+
+/** Run only this test (and any other `only`). Nothing else runs. */
+test.only = (name, fn) => {
+  state.only = true;
+  queue.push({ name: fullName(name), fn, only: true });
+};
+
+test.skip = (name, fn) => {
+  queue.push({ name: fullName(name), fn, skip: true });
+};
+
+const hooks = { setup: [], teardown: [] };
+
+export function setup(fn) {
+  hooks.setup.push({ scope: stack.join(" › "), fn });
+}
+
+export function teardown(fn) {
+  hooks.teardown.push({ scope: stack.join(" › "), fn });
+}
+
+function hooksFor(list, name) {
+  return list.filter((hook) => hook.scope === "" || name.startsWith(hook.scope)).map((h) => h.fn);
+}
+
+/**
+ * A deterministic fake clock and fake rAF (§23.1).
+ *
+ * Gesture recognizers and motion are timing-dependent, and timing-dependent
+ * tests are flaky tests unless the clock is under the test's control. This is
+ * installed per test rather than globally so a test that wants real time can
+ * simply not ask for it.
+ */
+export function fakeClock() {
+  let now = 0;
+  const frames = [];
+  const timers = [];
+  let nextId = 1;
+
+  return {
+    api: {
+      raf(fn) {
+        const id = nextId++;
+        frames.push({ id, fn });
+        return id;
+      },
+      caf(id) {
+        const index = frames.findIndex((f) => f.id === id);
+        if (index !== -1) frames.splice(index, 1);
+      },
+      now: () => now
+    },
+    /** Advance by `ms`, running any frame callbacks that fall due. */
+    advance(ms, step) {
+      const slice = step || 16;
+      const target = now + ms;
+      while (now < target) {
+        now = Math.min(now + slice, target);
+        this.frame();
+      }
+      return now;
+    },
+    /** Run exactly one animation frame. */
+    frame() {
+      const due = frames.splice(0);
+      for (const entry of due) entry.fn(now);
+    },
+    get time() {
+      return now;
+    },
+    timers
+  };
+}
+
+/**
+ * Synthetic pointer sequences (§23.2, interaction tier).
+ *
+ * A scripted trace rather than a real gesture: recognizers are pure functions
+ * of an event sequence (§13.3), so this is all they need.
+ */
+export function pointer(target, options) {
+  const opts = options || {};
+  let id = opts.pointerId || 1;
+  const fire = (type, x, y, extra) => {
+    const event = new PointerEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      pointerId: id,
+      pointerType: opts.pointerType || "mouse",
+      isPrimary: true,
+      clientX: x,
+      clientY: y,
+      buttons: type === "pointerup" ? 0 : 1,
+      ...(extra || {})
+    });
+    target.dispatchEvent(event);
+    return event;
+  };
+  return {
+    down: (x, y) => fire("pointerdown", x, y),
+    move: (x, y) => fire("pointermove", x, y),
+    up: (x, y) => fire("pointerup", x, y),
+    cancel: (x, y) => fire("pointercancel", x, y),
+    /** down → n moves → up, which is what a drag test almost always wants. */
+    drag(from, to, steps) {
+      const count = steps || 4;
+      this.down(from.x, from.y);
+      for (let i = 1; i <= count; i++) {
+        this.move(
+          from.x + ((to.x - from.x) * i) / count,
+          from.y + ((to.y - from.y) * i) / count
+        );
+      }
+      this.up(to.x, to.y);
+    }
+  };
+}
+
+export function key(target, name, options) {
+  const event = new KeyboardEvent("keydown", {
+    bubbles: true,
+    cancelable: true,
+    key: name,
+    ...(options || {})
+  });
+  target.dispatchEvent(event);
+  return event;
+}
+
+async function runOne(entry) {
+  const t = new Assert(entry.name);
+  const started = performance.now();
+  const record = { name: entry.name, passed: true, skipped: false, error: null, assertions: 0, ms: 0 };
+
+  if (entry.skip || (state.only && !entry.only) || (state.filter && !entry.name.includes(state.filter))) {
+    record.skipped = true;
+    return record;
   }
 
-  function run() {
-    results = queue.map(function (item) {
-      var assert = new Assert();
+  try {
+    for (const fn of hooksFor(hooks.setup, entry.name)) await fn(t);
+    await entry.fn(t);
+  } catch (error) {
+    record.passed = false;
+    record.error = error && error.message ? error.message : String(error);
+    if (error && !error.assertion) record.stack = error.stack;
+  } finally {
+    for (const fn of hooksFor(hooks.teardown, entry.name).reverse()) {
       try {
-        item.fn(assert);
-        return { name: item.name, passed: true, count: assert.assertions.length };
+        await fn(t);
       } catch (error) {
-        return { name: item.name, passed: false, error: error.message };
+        record.passed = false;
+        record.error = record.error || `teardown: ${error.message}`;
       }
-    });
-    render();
-    return results;
-  }
-
-  function render() {
-    var list = document.getElementById("results");
-    var summary = document.getElementById("summary");
-    if (!list) return;
-
-    list.innerHTML = "";
-    var passed = 0;
-
-    results.forEach(function (result) {
-      if (result.passed) passed++;
-      var li = document.createElement("li");
-      li.className = "result " + (result.passed ? "pass" : "fail");
-      var label = document.createElement("span");
-      label.className = "result-name";
-      label.textContent = result.name;
-      li.appendChild(label);
-      if (!result.passed) {
-        var detail = document.createElement("span");
-        detail.className = "result-detail";
-        detail.textContent = result.error;
-        li.appendChild(detail);
+    }
+    for (const dispose of t.disposers.reverse()) {
+      try {
+        dispose();
+      } catch (error) {
+        /* a cleanup failure must not mask the test's own result */
       }
-      list.appendChild(li);
-    });
-
-    if (summary) {
-      var total = results.length;
-      summary.textContent = passed + "/" + total + " passing";
-      summary.className = "summary " + (passed === total ? "pass" : "fail");
     }
   }
 
-  global.test = test;
-  global.harness = {
-    test: test,
-    run: run,
-    get results() { return results; }
-  };
+  record.assertions = t.assertions.length;
+  record.ms = performance.now() - started;
+  return record;
+}
 
-  // Tests register during test.js, which loads after this file; run on ready.
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", run);
-  } else {
-    setTimeout(run, 0);
+function render(record) {
+  const list = document.getElementById("results");
+  if (!list) return;
+  const item = document.createElement("li");
+  item.className = record.skipped ? "skip" : record.passed ? "pass" : "fail";
+  item.innerHTML = "";
+  const name = document.createElement("span");
+  name.className = "name";
+  name.textContent = record.name;
+  item.appendChild(name);
+  if (record.error) {
+    const why = document.createElement("span");
+    why.className = "why";
+    why.textContent = record.error;
+    item.appendChild(why);
   }
-})(window);
+  list.appendChild(item);
+}
+
+async function run() {
+  state.running = true;
+  for (const entry of queue) {
+    const record = await runOne(entry);
+    state.results.push(record);
+    render(record);
+  }
+  state.running = false;
+  state.done = true;
+
+  const passed = state.results.filter((r) => r.passed && !r.skipped).length;
+  const failed = state.results.filter((r) => !r.passed).length;
+  const skipped = state.results.filter((r) => r.skipped).length;
+  const summary = document.getElementById("summary");
+  if (summary) {
+    summary.textContent = `${passed} passed · ${failed} failed · ${skipped} skipped`;
+    summary.className = `summary ${failed ? "fail" : "pass"}`;
+  }
+  document.documentElement.setAttribute("data-harness", failed ? "fail" : "pass");
+  return { passed, failed, skipped, results: state.results };
+}
+
+/** Start the run once every test module has registered. */
+export function start() {
+  return run().then((summary) => {
+    window.harness.summary = summary;
+    return summary;
+  });
+}
+
+window.harness = {
+  get results() {
+    return state.results;
+  },
+  get done() {
+    return state.done;
+  },
+  summary: null,
+  filter: state.filter,
+  queue
+};
+
+export { state as harnessState };

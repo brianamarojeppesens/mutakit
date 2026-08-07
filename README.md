@@ -1,106 +1,162 @@
 # Mutakit
 
-A dependency-free browser library that builds and mutates graphical user interfaces from
-declarative geometry — you describe *what element* and *where*, and the library resolves
-layout, interaction, accessibility, and styling.
+A dependency-free browser library that builds and mutates graphical user
+interfaces from declarative geometry — you describe *what element* and *where*,
+and the library resolves layout, interaction, accessibility, and styling.
 
-> **Status: pre-implementation scaffold (v0.2.0).** What ships today is the scaffold, not the
-> library above — `source/mutakit.js` is a UMD placeholder with a `hello()` function. The
-> design is complete and lives in [`PLAN.md`](PLAN.md), which is the source of truth;
-> `source/` is the implementation source of truth. Implementation starts at M0 (§26).
->
-> **The toolchain is mid-migration.** The commands below are the ones that work *now*. Draft 7
-> of the plan moves the build to Node, and that lands in M0 — see [Toolchain](#toolchain).
+```html
+<script src="build/mutakit.min.js"></script>
+<script>
+  const app = Mutakit.mount(document.body, { sizing: 'viewport' });
+
+  const [side, main] = app.split({ axis: 'x', gutter: 6, panes: [
+    { id: 'side', size: 240, min: 160 },
+    { id: 'main', size: '1fr' }
+  ]});
+
+  main.create('button', { text: 'Settings', on: { click: () =>
+    Mutakit.create('dialog', { size: { w: '60%', h: '70%' }, at: 'center',
+                               title: 'Settings' })
+  }});
+</script>
+```
+
+No build step, no framework, no runtime dependencies. A draggable split and a
+centred modal in the same vocabulary.
+
+> **Status: 0.4.0 — M1 complete.** The kernel, geometry model, layout engine,
+> and the `anchor` and `stack` algorithms are implemented and tested. Splits
+> (M2), overlays (M3), forms (M4), and the HUD family (M5) are next; the
+> milestone list is [PLAN.md §26](PLAN.md#26-roadmap). `PLAN.md` is the design
+> source of truth; `source/` is the implementation source of truth.
+
+## The premise
+
+Most UI toolkits make you think in the browser's layout primitives and then
+fight them when you want desktop-application geometry: split panes, floating
+windows, docked panels, modals sized as a fraction of the viewport, HUD
+elements pinned to screen edges. Mutakit inverts that. The authoring vocabulary
+is **element type + geometric intent**; the library compiles that intent into
+CSS the browser executes fast, and supplies JavaScript only where interaction
+genuinely requires a number.
+
+```js
+// pinned bottom-right, sized to content
+app.create('pane', { right: 24, bottom: 24 });
+// a full-height right rail
+app.create('pane', { right: 0, top: 0, bottom: 0, width: 320 });
+// 80% × 85%, centred
+Mutakit.create('surface', { size: { w: '80%', h: '85%' }, at: 'center' });
+```
+
+Two of `{left, right, width}` determine an axis; the third is derived. That one
+rule is why the HUD case falls out for free.
 
 ## Layout
 
 ```
 PLAN.md         the design source of truth — read this first
 source/         the implementation source of truth — edit here
-build/          generated output, both expanded and minified; regenerated, never edited
-test/           browser harness for exercising the library
-  proto/        standalone prototypes that answer a specific design question
+  core/         kernel, registries, diagnostics, signals, the DOM adapter
+  geometry/     Len algebra, rects, anchors, constraints, insets, spaces
+  engine/       node tree, invalidation, frame loop, measurement, style compiler
+  layout/       layout algorithms (anchor, stack, …)
+  traits/       behaviours composed onto element types
+  services/     layers, persistence, …
+  elements/     the element catalog
+  entries/      one file per preset; its imports are its definition
+build/          generated; regenerated, never edited
+test/           unit/ runs under node --test · the rest runs in a real browser
 tools/          build-support scripts
-unpinned.json   project manifest read by the dev shell
+docs/           diagnostics, generated API reference
+examples/       runnable pages, and the subject of the type check
+```
+
+## Requirements
+
+Node **≥ 22.12** for the toolchain. The *shipped library* has zero runtime
+dependencies and needs nothing but a browser.
+
+```bash
+npm install
 ```
 
 ## Build
 
 ```bash
-python3 build.py
+npm run build          # every preset, expanded + minified, IIFE + ESM
+npm run build:watch    # rebuild on save
+npm run check          # verify without writing
 ```
 
-Produces `build/mutakit.js` and `build/mutakit.min.js`. Nothing in `build/` should be edited
-by hand. `python3 build.py --check` verifies without writing.
-
-`build.py` concatenates the files listed in `unpinned.json:source.files` and runs a
-line-preserving minifier that strips comments and collapses whitespace without renaming
-identifiers. Its nested-template handling is covered by a regression probe:
-
-```bash
-python3 tools/test_build.py      # 31 cases, all passing
-```
+Output lands in `build/`, along with `manifest.json`: per-module shipped sizes
+from esbuild's metafile, the resolved import graph, and SRI hashes for CDN
+users. It reports what actually shipped *after* tree-shaking, which is why the
+size table in PLAN.md §20.5 is a measurement rather than a projection.
 
 ## Test
 
-Open `test/index.html` in a browser, or serve the project folder:
+Three tiers, split on a principle: **tests that need a real browser run in one;
+tests that do not, do not.**
 
 ```bash
-python3 -m http.server 8080
+npm run test:unit      # DOM-free: Len, rects, constraints, signals — node --test
+npm run serve          # then open http://localhost:8080/test/index.html
+npm test               # unit + lint + build + headless browser run
 ```
 
-The harness loads `source/mutakit.js` directly, so a rebuild is not needed while developing.
-Switch the `<script src>` in `test/index.html` to the build output when verifying a release.
+The browser harness **must be served** — ES modules are fetched, so `file://`
+is CORS-blocked. `npm run serve` is the shortest path; the harness loads
+`source/` directly, so no rebuild is needed while developing.
+`?filter=geometry` narrows a run.
+
+Cross-engine runs use Playwright against the §25.3 baseline:
+
+```bash
+npx playwright test                       # chromium, firefox, webkit
+MK_ENGINES=chromium,firefox node tools/serve.mjs --run   # TAP output
+```
 
 ### Prototypes
 
-`test/proto/` holds self-contained pages that answer one design question and report their own
-PASS/FAIL. These **must be served, not opened over `file://`** — the browser blocks local file
-access that they depend on.
+`test/proto/` holds self-contained pages answering one design question and
+reporting their own PASS/FAIL. They must be served, not opened over `file://`.
+
+- `split-grid.html` — whether CSS Grid alone expresses the `split` clamping
+  cascade (PLAN.md §27.2 R1). Passes in Chrome; the cross-engine runs are the
+  M1 exit gate and are wired into `test/e2e/`.
+
+## Checks
 
 ```bash
-python3 -m http.server 8080     # then open test/proto/split-grid.html
+npm run lint           # architectural lint (§22.4)
+npm run types          # regenerate .d.ts, then tsc --noEmit over examples/
+npm run docs           # regenerate docs/api/ from the prop schemas
 ```
 
-- `split-grid.html` — whether CSS Grid alone can express the `split` clamping cascade
-  (PLAN.md §27.2 R1). Passes in Chrome; Firefox and Safari runs are still outstanding, and
-  are the M1 exit gate.
+The lint is what keeps the architecture true a year from now: no upward imports
+between layers, no file but `core/dom.js` touching `document`, every element
+type declaring accessibility semantics or opting out explicitly, every
+diagnostic code catalogued *and* documented, and no import cycles.
 
-## Toolchain
+## Two rules worth stating plainly
 
-Node **24.19.0** is available and build-time dependencies are permitted. Draft 7 of the plan
-acts on that, and the migration lands in M0:
+**Dependency-free describes what ships, not what builds it.** Nothing Mutakit
+sends to a user's page depends on anything else. The toolchain uses ordinary
+Node dependencies; adding a *runtime* one requires a decision record and a size
+measurement (PLAN.md §2.1).
 
-| Today | After M0 | Why |
-|---|---|---|
-| `build.py` concatenates | esbuild bundles | tree-shaking, source maps (§22.3) |
-| hand-written minifier | esbuild minifies | identifier mangling; deletes a hand-rolled tokenizer (§20.4) |
-| IIFE module registry | plain ESM | the registry existed only to survive concatenation (§22.2) |
-| open `test/index.html` | serve it | ESM is fetched, so `file://` is CORS-blocked (§23.3) |
-| Chrome by hand | Playwright | cross-engine CI; unblocks the R1 gate (§23.3) |
-| — | `node --test` | the DOM-free unit tier needs no dependency at all |
+**The `<script>`-tag path is not a fallback.** Mutakit must stay usable from a
+single tag with no build step, which is why tagged builds are committed and
+presets are pre-cut.
 
-Two rules survive the migration and are worth stating plainly:
+## Diagnostics
 
-- **Dependency-free describes what ships, not what builds it.** Nothing Mutakit sends to a
-  user's page depends on anything else. The toolchain uses ordinary Node dependencies; the
-  library has zero runtime dependencies, and adding one requires a decision record and a size
-  measurement (PLAN.md §2.1).
-- **The `<script>`-tag path is not a fallback.** Mutakit must stay usable from a single tag
-  with no build step, which is why tagged builds are committed and presets are pre-cut.
+Every problem reports a stable code with a documented cause and fix — see
+[`docs/diagnostics.md`](docs/diagnostics.md). Development throws on programmer
+error and warns on recoverable ambiguity; production warns once and applies the
+documented fallback. Nothing silently does nothing.
 
-## Usage
+## Licence
 
-```html
-<script src="build/mutakit.min.js"></script>
-<script>
-  Mutakit.hello("world");
-</script>
-```
-
-The module ships as UMD, so it also works with CommonJS and AMD loaders.
-
-> `hello()` is scaffold placeholder API and is deleted in M0. The real surface is
-> `mk.create('pane', …)` — see PLAN.md §8 for the element contract and §5 for the geometry
-> model. After M0 the package also publishes as ESM to npm, with UMD retained for the CDN
-> path (§25.5).
+MIT.
