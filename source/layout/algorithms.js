@@ -99,7 +99,10 @@ export const dockLayout = {
           // can choose to respect application chrome.
           const edge = physicalEdge(region, rtl);
           insets[edge] += extent;
-          node.insets.set(`dock:${child.id || region}`, { [edge]: insets[edge] });
+          // Published, not self-applied: this describes the chrome *inside*
+          // this node, for an overlay that opts to respect it. Applying it to
+          // this node's own frame shrank the frame the regions are placed in.
+          node.insets.set(`dock:${child.id || region}`, { [edge]: insets[edge] }, { selfApply: false });
         }
       }
     }

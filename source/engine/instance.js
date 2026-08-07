@@ -283,8 +283,22 @@ export class MutakitInstance extends Kernel {
       }
       this._applyAlgorithmCSS(node);
       if (node.id) element.setAttribute("data-mk-id", node.id);
-      if (options.class) element.classList.add(...String(options.class).split(/\s+/));
-      if (options.style) dom.setStyles(element, options.style);
+      // Kept on the node, not only on the element. `class` and `style` are
+      // authored declaratively and are part of the tree §19.1 promises to round
+      // trip, but they were written straight to the DOM and never recorded, so
+      // there was nothing for `serialize` to emit. A restored layout came back
+      // with its structure, geometry and content intact and none of its styling
+      // hooks — every label in the IDE example lost the class that made it look
+      // like a label. Reading them back off `classList` is not an option: by
+      // then they are mixed with the engine's own.
+      if (options.class) {
+        node.className = String(options.class);
+        element.classList.add(...node.className.split(/\s+/));
+      }
+      if (options.style) {
+        node.inlineStyle = options.style;
+        dom.setStyles(element, options.style);
+      }
       node.own(() => dom.remove(element));
     }
 
@@ -1459,7 +1473,9 @@ export class MutakitInstance extends Kernel {
       return;
     }
 
-    node.effectiveInsets = node.insets.compose(this.metrics.current, node.geometry.insets);
+    node.effectiveInsets = node.insets.compose(this.metrics.current, node.geometry.insets, {
+      forSelf: true
+    });
     const insets = node.effectiveInsets;
     node.frame.x = insets.left;
     node.frame.y = insets.top;

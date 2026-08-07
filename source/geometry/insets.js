@@ -24,11 +24,21 @@ export class InsetStack {
    * is stored as a *resolver* — the metrics snapshot fills in the number each
    * frame rather than the caller measuring once and going stale.
    */
-  set(name, value) {
+  set(name, value, options) {
     const entry =
       typeof value === "string" || typeof value === "function"
         ? { dynamic: value }
         : { fixed: normalizeInset(value) };
+    // `{ selfApply: false }` publishes a contribution to whoever asks for it
+    // without applying it to the contributor's own frame.
+    //
+    // `dock` needs this: it records each region's extent so that an overlay can
+    // choose to respect application chrome, but it records them *on the docked
+    // node itself*. Composing them into that node's own frame made the regions
+    // lay out inside a frame already shrunk by the previous pass — so the
+    // entire shell jumped by the width of its own sidebar the first time
+    // anything triggered a second arrange, such as opening a dialog.
+    entry.selfApply = !(options && options.selfApply === false);
     this.entries.set(name, entry);
     this._dirty = true;
     return this;
@@ -57,11 +67,16 @@ export class InsetStack {
    * The composed inset. `filter` is `false` (opt out entirely), an array of
    * names to include, or undefined for everything.
    */
-  compose(metrics, filter) {
+  compose(metrics, filter, options) {
     if (filter === false) return NO_INSET;
+    // Composing the contributor's own frame skips anything published for other
+    // nodes to read. Asking for a contribution by name still returns it, which
+    // is what makes respecting chrome an opt-in rather than the default.
+    const forSelf = !!(options && options.forSelf);
     const list = [];
     for (const [name, entry] of this.entries) {
       if (Array.isArray(filter) && filter.indexOf(name) === -1) continue;
+      if (forSelf && entry.selfApply === false) continue;
       list.push(entry.fixed ? entry.fixed : resolveDynamic(entry.dynamic, metrics, name));
     }
     const composed = maxInsets(list);
