@@ -1,0 +1,28 @@
+{
+  "name": "mutakit",
+  "title": "Mutakit",
+  "description": "A mutable UI scaffold developed in javascript.",
+  "version": "0.2.0",
+  "kind": "library",
+  "author": "Brian Amaro-Jeppesen",
+  "created": "2026-07-25",
+  "global": "Mutakit",
+  "source": {
+    "dir": "source",
+    "entry": "source/mutakit.js",
+    "files": [
+      "source/mutakit.js"
+    ]
+  },
+  "build": {
+    "dir": "build",
+    "expanded": "build/mutakit.js",
+    "minified": "build/mutakit.min.js",
+    "command": "python3 build.py"
+  },
+  "test": {
+    "dir": "test",
+    "entry": "test/index.html",
+    "port": 8080
+  }
+}

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mutakit — test harness</title>
+  <link rel="stylesheet" href="harness.css">
+</head>
+<body>
+  <header class="harness-header">
+    <h1>Mutakit</h1>
+    <p class="tagline">A mutable UI scaffold developed in javascript.</p>
+    <p class="source-note">
+      loading <code id="source-label">../source/mutakit.js</code>
+      — switch to <code>../build/mutakit.min.js</code> to verify a release
+    </p>
+  </header>
+
+  <main>
+    <!-- Scratch area: drop markup here for whatever this project needs. -->
+    <section class="panel" id="sandbox">
+      <h2>Sandbox</h2>
+      <div id="demo"></div>
+    </section>
+
+    <section class="panel" id="results-panel">
+      <h2>Tests <span id="summary" class="summary"></span></h2>
+      <ol id="results" class="results"></ol>
+    </section>
+  </main>
+
+  <!-- Library under test. Swap this line to test the build output instead. -->
+  <script src="../source/mutakit.js"></script>
+  <!-- Tiny assertion helper. Rarely needs editing. -->
+  <script src="harness.js"></script>
+  <!-- Your tests. This is the file to customise per project. -->
+  <script src="test.js"></script>
+</body>
+</html>

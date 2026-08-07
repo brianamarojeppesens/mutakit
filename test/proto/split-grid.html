@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>R1 prototype — split clamping in pure CSS Grid</title>
+<style>
+  :root {
+    --bg: #14161a; --panel: #1b1e24; --line: #2a2f38; --text: #e6e8ec;
+    --muted: #8b93a1; --accent: #7dd3fc; --ok: #4ade80; --warn: #fbbf24;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#f7f8fa; --panel:#fff; --line:#e2e5ea; --text:#1a1d22;
+            --muted:#6b7280; --accent:#0369a1; --ok:#15803d; --warn:#b45309; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:1.25rem; background:var(--bg); color:var(--text);
+         font:14px/1.55 ui-sans-serif, system-ui, sans-serif; }
+  h1 { font-size:1.05rem; margin:0 0 .2rem; }
+  p.lede { color:var(--muted); margin:0 0 1rem; max-width:60rem; }
+  code { font-family:ui-monospace,Menlo,monospace; color:var(--accent); font-size:.85em; }
+
+  /* ── The thing under test ────────────────────────────────────────────
+     Track sizes are pure CSS. During a drag JS writes ONE custom property
+     (--w0 or --w1) with a completely UNCLAMPED pixel value. Every min/max
+     bound, and the neighbour-exhaustion bound, is applied by clamp()/min()
+     inside the track list. If the panes stop at their limits, CSS did it. */
+  .split {
+    --g: 6px;
+    --min0: 64px;  --max0: 380px;
+    --min1: 80px;  --max1: 500px;
+    --min2: 100px;
+    /* Initial values so the track list is valid before the first JS write —
+       an undefined var() inside min() would invalidate the whole property. */
+    --w0: 220px;   --w1: 260px;
+
+    /* pane 0 upper bound: container minus gutters, minus what panes 1+2 must keep */
+    --cap0: calc(100% - 2 * var(--g) - var(--min1) - var(--min2));
+    /* pane 1 upper bound: whatever is left once pane 0 and pane 2's min are taken */
+    --cap1: calc(100% - 2 * var(--g) - var(--t0) - var(--min2));
+
+    --t0: clamp(var(--min0), min(var(--w0), var(--cap0)), var(--max0));
+    --t1: clamp(var(--min1), min(var(--w1), var(--cap1)), var(--max1));
+
+    display: grid;
+    grid-template-columns: var(--t0) var(--g) var(--t1) var(--g) minmax(var(--min2), 1fr);
+    height: 260px; border:1px solid var(--line); border-radius:8px; overflow:hidden;
+    background: var(--panel);
+  }
+  .pane { padding:.6rem .7rem; overflow:hidden; contain:layout style paint;
+          font-family:ui-monospace,Menlo,monospace; font-size:.78rem; color:var(--muted); }
+  .pane b { display:block; color:var(--text); font-family:inherit; margin-bottom:.25rem; }
+  .gutter { background:var(--line); cursor:col-resize; position:relative; }
+  .gutter::after { content:""; position:absolute; inset:0 -4px; }  /* hit slop */
+  .gutter[data-drag] { background:var(--accent); }
+
+  .controls { display:flex; gap:1rem; align-items:center; flex-wrap:wrap;
+              margin:.9rem 0; }
+  label { color:var(--muted); }
+  .readout { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr));
+             gap:.6rem; margin-top:.9rem; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:8px;
+          padding:.6rem .7rem; font-family:ui-monospace,Menlo,monospace; font-size:.78rem; }
+  .card h3 { margin:0 0 .35rem; font-size:.7rem; text-transform:uppercase;
+             letter-spacing:.07em; color:var(--muted); font-family:ui-sans-serif,sans-serif; }
+  .row { display:flex; justify-content:space-between; gap:1rem; }
+  .row span:last-child { color:var(--text); }
+  .clamped { color:var(--warn) !important; }
+  .verdict { margin-top:1rem; padding:.7rem .8rem; border-radius:8px;
+             border:1px solid var(--line); background:var(--panel); max-width:60rem; }
+  .verdict b { color:var(--ok); }
+</style>
+</head>
+<body>
+
+<h1>R1 prototype — can CSS Grid express the split clamping cascade?</h1>
+<p class="lede">
+  Drag either separator hard against its limits. In <code>neighbor</code> and
+  <code>distribute</code> modes, JavaScript writes one <em>unclamped</em> pixel value per
+  pointer&nbsp;move and does no arithmetic beyond <code>start + delta</code> — every bound you
+  observe is applied by <code>clamp()</code> / <code>min()</code> inside
+  <code>grid-template-columns</code>. In <code>push</code> mode JS computes the cascade itself;
+  watch the <em>JS ops/move</em> counter change.
+</p>
+<p class="lede">
+  <b>Known limit — <code>distribute</code>.</b> While gutter&nbsp;0 is dragged, pane&nbsp;1
+  becomes <code>minmax(min, 1fr)</code> so the remainder spreads proportionally. That gives the
+  track a floor but <em>no ceiling</em>: <code>fr</code> maxima are uncapped by construction, so
+  pane&nbsp;1 can sail past <code>max1</code> and the verdict below will correctly say so. The
+  size is committed and re-clamped on release. Dragging gutter&nbsp;1 keeps pane&nbsp;1 explicit
+  — with <code>--t1</code> pinned at <code>1fr</code>, <code>--w1</code> is inert and that
+  separator cannot move at all.
+</p>
+
+<div class="controls">
+  <label><input type="radio" name="mode" value="neighbor" checked> neighbor</label>
+  <label><input type="radio" name="mode" value="distribute"> distribute</label>
+  <label><input type="radio" name="mode" value="push"> push</label>
+  <button id="reset">reset</button>
+</div>
+
+<div class="split" id="split">
+  <div class="pane"><b>pane 0</b>min 64 · max 380</div>
+  <div class="gutter" data-gutter="0"></div>
+  <div class="pane"><b>pane 1</b>min 80 · max 500</div>
+  <div class="gutter" data-gutter="1"></div>
+  <div class="pane"><b>pane 2</b>min 100 · 1fr</div>
+</div>
+
+<div class="readout">
+  <div class="card"><h3>pane 0</h3>
+    <div class="row"><span>raw --w0</span><span id="raw0">–</span></div>
+    <div class="row"><span>actual</span><span id="act0">–</span></div></div>
+  <div class="card"><h3>pane 1</h3>
+    <div class="row"><span>raw --w1</span><span id="raw1">–</span></div>
+    <div class="row"><span>actual</span><span id="act1">–</span></div></div>
+  <div class="card"><h3>pane 2</h3>
+    <div class="row"><span>actual (1fr)</span><span id="act2">–</span></div>
+    <div class="row"><span>container</span><span id="cw">–</span></div></div>
+  <div class="card"><h3>work per pointermove</h3>
+    <div class="row"><span>JS ops</span><span id="ops">–</span></div>
+    <div class="row"><span>props written</span><span id="props">–</span></div></div>
+</div>
+
+<div class="verdict" id="verdict"></div>
+
+<script>
+(function () {
+  "use strict";
+  var split = document.getElementById('split');
+  var panes = split.querySelectorAll('.pane');
+  var LIM = { min0:64, max0:380, min1:80, max1:500, min2:100, g:6 };
+  var mode = 'neighbor';
+  var raw = { w0: 220, w1: 260 };
+  var stats = { ops: 0, props: 0 };
+
+  var T1_CLAMP = 'clamp(var(--min1), min(var(--w1), var(--cap1)), var(--max1))';
+  var T1_FLEX  = 'minmax(var(--min1), 1fr)';
+  function setT1(flex) {
+    split.style.setProperty('--t1', flex ? T1_FLEX : T1_CLAMP);
+  }
+
+  function write() {
+    split.style.setProperty('--w0', raw.w0 + 'px');
+    split.style.setProperty('--w1', raw.w1 + 'px');
+  }
+
+  // The container's CONTENT box — this is what the track list resolves against and what
+  // the tracks must sum to. getBoundingClientRect() would include the border and make a
+  // correct layout look like a 2px overflow. Subtracting the resolved border widths keeps
+  // sub-pixel precision that clientWidth (integer-rounded) would lose.
+  function contentWidth() {
+    var cs = getComputedStyle(split);
+    return split.getBoundingClientRect().width -
+           parseFloat(cs.borderLeftWidth) - parseFloat(cs.borderRightWidth);
+  }
+
+  // Coalesce readout updates to one per frame, and never leave a stale frame pending —
+  // otherwise the cards can show the previous drag's numbers after this one has ended.
+  var pending = 0;
+  function scheduleReport() {
+    if (pending) return;
+    pending = requestAnimationFrame(function () { pending = 0; report(); });
+  }
+  function reportNow() {
+    if (pending) { cancelAnimationFrame(pending); pending = 0; }
+    report();
+  }
+
+  function report() {
+    var r = [].map.call(panes, function (p) { return p.getBoundingClientRect().width; });
+    var cw = contentWidth();
+    document.getElementById('raw0').textContent = Math.round(raw.w0) + 'px';
+    document.getElementById('raw1').textContent = Math.round(raw.w1) + 'px';
+    document.getElementById('act0').textContent = r[0].toFixed(1) + 'px';
+    document.getElementById('act1').textContent = r[1].toFixed(1) + 'px';
+    document.getElementById('act2').textContent = r[2].toFixed(1) + 'px';
+    document.getElementById('cw').textContent   = cw.toFixed(1) + 'px';
+    document.getElementById('ops').textContent  = stats.ops;
+    document.getElementById('props').textContent = stats.props;
+    // Highlight when CSS is actively overriding the raw value.
+    document.getElementById('act0').className =
+      Math.abs(r[0] - raw.w0) > 0.5 ? 'clamped' : '';
+    document.getElementById('act1').className =
+      Math.abs(r[1] - raw.w1) > 0.5 ? 'clamped' : '';
+    verdict(r, cw);
+  }
+
+  function verdict(r, cw) {
+    var sum = r[0] + r[1] + r[2] + 2 * LIM.g;
+    // Once the container is narrower than every minimum plus the gutters, the minimums win
+    // and the container overflows. That is defined behaviour — no track solver can honour
+    // both — so the expected total is the floor, not the container.
+    var floor = LIM.min0 + LIM.min1 + LIM.min2 + 2 * LIM.g;
+    var atFloor = cw < floor - .5;
+    var overflow = Math.abs(sum - Math.max(cw, floor)) > 1.5;
+    // Name the offender — "a limit was violated" is not actionable, and `distribute` has a
+    // real one to report: minmax(min, 1fr) gives a flexible track a floor but no ceiling,
+    // so a non-dragged pane can sail past its max. `fr` maxima are uncapped by construction.
+    var broke = [];
+    if (r[0] < LIM.min0 - .5) broke.push('pane 0 < min0 (' + LIM.min0 + ')');
+    if (r[0] > LIM.max0 + .5) broke.push('pane 0 > max0 (' + LIM.max0 + ')');
+    if (r[1] < LIM.min1 - .5) broke.push('pane 1 < min1 (' + LIM.min1 + ')');
+    if (r[1] > LIM.max1 + .5) broke.push('pane 1 > max1 (' + LIM.max1 + ')');
+    if (r[2] < LIM.min2 - .5) broke.push('pane 2 < min2 (' + LIM.min2 + ')');
+    var respected = broke.length === 0;
+    document.getElementById('verdict').innerHTML =
+      (respected && !overflow
+        ? '<b>PASS</b> — every min/max holds and tracks sum to ' +
+          (atFloor ? 'the minimum floor' : 'the container')
+        : '<b style="color:var(--warn)">FAIL</b> — ' +
+          (!respected ? broke.join('; ') + '. ' : '') +
+          (overflow ? 'tracks do not sum to the expected total.' : '')) +
+      (atFloor
+        ? '<br><span style="color:var(--warn)">container is below Σ mins + gutters (' +
+          floor + 'px) — minimums held and the container overflows, as specified.</span>'
+        : '') +
+      '<br>mode <code>' + mode + '</code> · ' +
+      (mode === 'push'
+        ? 'JS computes the cascade; CSS re-clamps idempotently.'
+        : 'JS wrote raw values only — all clamping done by CSS.');
+  }
+
+  // ── drag ────────────────────────────────────────────────────────────
+  split.addEventListener('pointerdown', function (e) {
+    var g = e.target.closest('.gutter');
+    if (!g) return;
+    var which = +g.dataset.gutter;
+    var startX = e.clientX;
+    var s0 = raw.w0, s1 = raw.w1;
+
+    // `distribute` makes pane 1 flexible ONLY while gutter 0 is being dragged — that is the
+    // drag whose remainder has somewhere to spread. Dragging gutter 1 sets the pane 1 /
+    // pane 2 boundary directly, which needs pane 1 to carry an explicit size; with --t1
+    // pinned at 1fr, --w1 is inert and that gutter cannot move at all.
+    var flexT1 = (mode === 'distribute' && which === 0);
+    if (flexT1) setT1(true);
+
+    g.setAttribute('data-drag', '');
+    g.setPointerCapture(e.pointerId);
+
+    function move(ev) {
+      var dx = ev.clientX - startX;
+      stats.ops = 0; stats.props = 2;
+
+      if (mode === 'push') {
+        // Sequential exhaustion is NOT expressible as fr distribution, so JS
+        // walks the cascade: pane 1 gives until its min, then pane 2 does.
+        // O(n) trivial arithmetic over a handful of panes, once per move.
+        var inner = split.getBoundingClientRect().width - 2 * LIM.g;
+        var w2s = inner - s0 - s1;              // pane 2's starting width
+        if (which === 0) {
+          var give1 = s1 - LIM.min1;            // pane 1 can yield this much
+          var give2 = w2s - LIM.min2;           // pane 2 can yield this much
+          var need = Math.max(
+            -(s0 - LIM.min0),                                  // shrink limit
+            Math.min(dx, give1 + give2, LIM.max0 - s0));       // grow limit
+          raw.w0 = s0 + need;
+          // pane 1 absorbs first; pane 2 (1fr) takes whatever is left over
+          raw.w1 = s1 - Math.max(-(LIM.max1 - s1), Math.min(need, give1));
+          stats.ops = 6;
+        } else {
+          raw.w1 = Math.max(LIM.min1,
+                     Math.min(s1 + dx, LIM.max1, s1 + (w2s - LIM.min2)));
+          stats.ops = 3;
+        }
+      } else {
+        // neighbor / distribute: write the RAW value. No clamping in JS at all.
+        if (which === 0) raw.w0 = s0 + dx; else raw.w1 = s1 + dx;
+        stats.ops = 1;
+      }
+      write();
+      scheduleReport();
+      ev.preventDefault();
+    }
+    function up(ev) {
+      if (flexT1) {
+        // Commit the width the browser distributed before pane 1 goes back to an explicit
+        // track, so reverting --t1 is invisible instead of snapping to the pre-drag size.
+        raw.w1 = panes[1].getBoundingClientRect().width;
+        setT1(false);
+        write();
+      }
+      g.removeAttribute('data-drag');
+      split.removeEventListener('pointermove', move);
+      split.removeEventListener('pointerup', up);
+      split.removeEventListener('pointercancel', up);
+      reportNow();
+      void ev;
+    }
+    split.addEventListener('pointermove', move);
+    split.addEventListener('pointerup', up);
+    split.addEventListener('pointercancel', up);
+    e.preventDefault();
+  });
+
+  document.querySelectorAll('input[name=mode]').forEach(function (el) {
+    el.addEventListener('change', function () {
+      mode = el.value;
+      // Modes differ only in what happens during a drag; at rest every mode holds explicit
+      // tracks. distribute flips pane 1 to 1fr on pointerdown and commits on pointerup.
+      setT1(false);
+      reportNow();
+    });
+  });
+
+  document.getElementById('reset').addEventListener('click', function () {
+    raw.w0 = 220; raw.w1 = 260; write(); reportNow();
+  });
+
+  new ResizeObserver(function () { report(); }).observe(split);
+  write(); report();
+})();
+</script>
+</body>
+</html>
