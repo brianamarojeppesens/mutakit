@@ -107,6 +107,10 @@ recurring pattern is that writing something out end to end found gaps that readi
   default, because §1.1's dependency-free claim describes the shipped artifact and not the
   workshop. R3 (the no-Node tax) retires; **R3′** replaces it, covering supply chain and
   dependency drift, and §21.4 gains the build as an acknowledged attack surface.
+  Runtime confirmed as **Node 24.19.0**, settling three specifics: the DOM-free unit tier
+  runs under built-in `node:test` with no dependency, `require(esm)` lets the npm package
+  ship **ESM only** and sidestep the dual-package hazard, and `"engines"` pins to `>=22.12`
+  rather than 24 so contributors are not forced onto the newest runtime.
   Nothing under `source/`, `build.py`, or `tools/` has changed yet — the migration is
   scheduled into M0, so this entry is design only.
 - **Draft 6** (2026-08-06) — Cleared the three highest-value open items. **D1 resolved on

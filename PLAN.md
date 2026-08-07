@@ -22,7 +22,11 @@
   tree-shaking, `tsc`-verified types. §2.1 now states a **two-budget rule** — build-time
   dependencies are free, runtime dependencies stay zero by default — because §1.1, §1.4, D13
   and §20.1 all rest on the shipped artifact having none. R3 retires; **R3′** replaces it,
-  covering supply chain and dependency drift.
+  covering supply chain and dependency drift. Runtime confirmed as **Node 24.19.0**, settling
+  three specifics: the DOM-free unit tier runs under built-in `node:test` with no dependency
+  (§23.1, §23.3), `require(esm)` lets the npm package ship **ESM only** and sidestep the
+  dual-package hazard (§25.5), and `"engines"` pins to `>=22.12` rather than 24 so
+  contributors are not forced onto the newest runtime.
 - **Draft 6** — Cleared the three highest-value open items. **D1 resolved on evidence**
   (§22.6): a 31-case probe of `build.py`'s minifier confirmed ES2020 support and found a real
   nested-template bug that silently deleted code from the minified build — fixed in
@@ -236,10 +240,19 @@ mutakit/
 ### 2.1 What this constrains
 
 > **Revised in draft 7.** Drafts 1–6 were written against a Python-only toolchain with no
-> `node` on PATH. Node is now available and third-party dependencies are permitted. The four
-> bullets below replace that constraint set; §22 and §23 are rewritten to match. The single
-> most important thing this section now says is the distinction in the first bullet — it is
-> what keeps the product promise intact while the toolchain changes underneath it.
+> `node` on PATH. **Node 24.19.0** is now available (confirmed 2026-08-06) and third-party
+> dependencies are permitted. The four bullets below replace that constraint set; §22 and §23
+> are rewritten to match. The single most important thing this section now says is the
+> distinction in the first bullet — it is what keeps the product promise intact while the
+> toolchain changes underneath it.
+>
+> Node 24 is far newer than anything this plan needs, and three of its capabilities are
+> load-bearing enough to name: **`node:test`** and `--watch` are built in, so the pure-unit
+> tier of §23.2 needs no test-runner dependency at all; **`require(esm)`** is unflagged, which
+> collapses the dual-package problem in §25.5; and **type stripping** runs `.ts` directly for
+> erasable syntax. Pin the minimum in `package.json` as `"engines": { "node": ">=22.12" }` —
+> the oldest version supporting `require(esm)` — rather than 24, so contributors are not
+> forced onto the newest runtime to build the project.
 
 - **Two dependency budgets, not one.** *Build-time* dependencies are permitted and
   unconstrained in kind: Node is on PATH, `npm install` is a legitimate instruction, and the
@@ -2593,8 +2606,15 @@ justification now that the option exists. The tests that matter most here are la
 and synthetic interaction sequences against real layout — they need a real browser, not a
 simulated DOM, and the harness's value is that it runs in the page under test with nothing in
 between. A general-purpose runner would add a dependency, a config surface, and a layer of
-indirection to solve a problem this project does not have. What Node buys the tests is the
-*driver* (§23.3), not the runner.
+indirection to solve a problem this project does not have. What Node buys the browser tests
+is the *driver* (§23.3), not the runner.
+
+The DOM-free tier is the exception, and it splits cleanly: those tests import pure functions
+and assert on numbers, so they run under Node's built-in `node:test` (§23.3) with no
+dependency and no browser. The division is principled rather than expedient — **tests that
+need a real browser run in one; tests that do not, do not** — and it means the geometry and
+engine suites, which carry §23.4's non-negotiable ≥ 95% branch requirement, have the fastest
+possible loop.
 
 The harness itself therefore keeps its no-build-step, no-runtime-dependency shape and grows to
 maybe 400 lines. Revisit only if the fake clock and fake rAF turn out to be the hard part, in
@@ -2630,6 +2650,12 @@ because the stub path is deterministic by construction.
 
 ### 23.3 Running
 
+- **Pure units under `node:test`** — the DOM-free tier of §23.2 (`Len` parsing, rect algebra,
+  constraint resolution, `fr` distribution, the signal graph) runs directly in Node with
+  **no dependency at all**, since the runner is built in from Node 20 and the source is ESM.
+  This is the fastest feedback loop in the project and it costs nothing: `node --test --watch`
+  re-runs the affected tests on save. It also means the highest-value tests keep running even
+  if browsers are unavailable in an environment.
 - Interactive: **serve the project**, then open `test/index.html` — e.g.
   `python3 -m http.server 8080`. Draft 7 note: ESM sources are fetched, so `file://` is
   blocked by CORS and the direct-open path drafts 1–6 assumed no longer works (§22.2).
@@ -2760,12 +2786,19 @@ it ships:
   form, and a size table in the README so the choice is informed.
 - **Subresource integrity** hashes are emitted into `build/manifest.json` (§22.3) and
   published in the release notes, so CDN users can pin safely.
-- **npm** (`mutakit`, shipping UMD + ESM + `.d.ts`) is unblocked by draft 7 — the gate was
-  D5, now resolved. The package sets `"type": "module"`, an `exports` map with `import`,
-  `require`, and `types` conditions, and `"sideEffects": false` so consumers' bundlers can
-  tree-shake through it. Publishing is `--provenance` from CI, never from a developer's
-  machine. Ship the CDN and npm paths together at 1.0; the docs lead with whichever matches
-  the reader's situation rather than apologising for a missing one.
+- **npm** (`mutakit`, shipping ESM + `.d.ts`, with UMD for the CDN path) is unblocked by
+  draft 7 — the gate was D5, now resolved. The package sets `"type": "module"`, an `exports`
+  map with `import`, `types`, and per-preset subpath entries, and `"sideEffects": false` so
+  consumers' bundlers can tree-shake through it. Publishing is `--provenance` from CI, never
+  from a developer's machine. Ship the CDN and npm paths together at 1.0; the docs lead with
+  whichever matches the reader's situation rather than apologising for a missing one.
+  **Ship ESM only, not a dual package.** `require(esm)` is unflagged from Node 22.12, so a
+  CommonJS consumer on a supported Node can `require()` an ESM package directly and the
+  usual reason for shipping both formats is gone. This avoids the dual-package hazard — two
+  copies of the module graph with two copies of the registries, which for a library holding
+  singleton state (§4.2 presets, the type registry) is a correctness bug, not just bloat.
+  The UMD build remains, but as the `<script>`-tag artifact it always was rather than as a
+  second npm entry point.
 - **Versioned URLs only** in documentation examples — never a floating `@latest`, which
   turns a patch release into everyone's outage.
 
