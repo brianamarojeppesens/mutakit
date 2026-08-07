@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>R1 — cross-engine measurement</title>
+<style>
+  body { margin:0; font:13px/1.5 ui-monospace, Menlo, monospace; background:#0f1115; color:#e6e8ec; }
+  #out { padding:1rem; white-space:pre-wrap; }
+  /*
+   * The rig under test, character-for-character the construct §7.3 delegates to
+   * CSS and §27.2 R1 puts at risk: nested clamp()/min() with a percentage
+   * inside grid-template-columns, plus one minmax(min, 1fr) flexible track.
+   */
+  #split {
+    --g: 6px;
+    --min0: 64px;  --max0: 380px;
+    --min1: 80px;  --max1: 500px;
+    --min2: 100px;
+    --w0: 220px;   --w1: 260px;
+    --cap0: calc(100% - 2 * var(--g) - var(--min1) - var(--min2));
+    --cap1: calc(100% - 2 * var(--g) - var(--t0) - var(--min2));
+    --t0: clamp(var(--min0), min(var(--w0), var(--cap0)), var(--max0));
+    --t1: clamp(var(--min1), min(var(--w1), var(--cap1)), var(--max1));
+    display: grid;
+    grid-template-columns: var(--t0) var(--g) var(--t1) var(--g) minmax(var(--min2), 1fr);
+    height: 120px;
+    box-sizing: border-box;
+  }
+  #split > i { display:block; }
+</style>
+</head>
+<body>
+<!--
+  R1's exit gate (§27.2) asks for "the same measurements, not the on-screen
+  verdict", in Firefox and Safari as well as Chrome. `split-grid.html` is
+  interactive: it needs someone to drag a gutter and read a PASS/FAIL. That is
+  why the gate stayed open — not because the question is hard, but because
+  discharging it took a person in three browsers.
+
+  This page asks the same question deterministically. It sweeps container
+  widths and requested track sizes, records what each engine resolved, and
+  publishes the numbers as JSON. No pointer events, no rAF, no verdict — a
+  verdict is a judgement, and what R1 needs to compare across engines is the
+  arithmetic underneath it.
+-->
+<div id="split"><i></i><i></i><i></i><i></i><i></i></div>
+<pre id="out">measuring…</pre>
+<script>
+(function () {
+  var split = document.getElementById("split");
+  var cells = split.querySelectorAll("i");
+  var LIM = { min0: 64, max0: 380, min1: 80, max1: 500, min2: 100, g: 6 };
+
+  var T1_CLAMP = "clamp(var(--min1), min(var(--w1), var(--cap1)), var(--max1))";
+  var T1_FLEX = "minmax(var(--min1), 1fr)";
+
+  /*
+   * The cases. Chosen to cover every boundary §27.2 names rather than to
+   * sample evenly: each limit reached from both sides, the flexible track with
+   * and without a maximum, and the container below Σ mins + gutters where
+   * §27.2 records that minimums win and the container overflows.
+   */
+  var CASES = [];
+  [900, 700, 520, 400, 256, 238].forEach(function (width) {
+    [[220, 260], [40, 260], [900, 260], [220, 40], [220, 900], [360, 480]].forEach(function (pair) {
+      CASES.push({ width: width, w0: pair[0], w1: pair[1], flex: false });
+    });
+    CASES.push({ width: width, w0: 220, w1: 260, flex: true });
+  });
+
+  function measure(testCase) {
+    split.style.width = testCase.width + "px";
+    split.style.setProperty("--w0", testCase.w0 + "px");
+    split.style.setProperty("--w1", testCase.w1 + "px");
+    split.style.setProperty("--t1", testCase.flex ? T1_FLEX : T1_CLAMP);
+
+    var style = getComputedStyle(split);
+    // The content box, not `clientWidth`: the border is subtracted at full
+    // precision, and an integer-rounded read would make a correct layout look
+    // like a one-pixel overflow at some widths.
+    var content = split.getBoundingClientRect().width -
+      parseFloat(style.borderLeftWidth) - parseFloat(style.borderRightWidth);
+    var tracks = [].map.call(cells, function (cell) {
+      return round(cell.getBoundingClientRect().width);
+    });
+    return {
+      width: testCase.width,
+      w0: testCase.w0,
+      w1: testCase.w1,
+      flex: testCase.flex,
+      content: round(content),
+      tracks: tracks,
+      // Recorded, not asserted. Whether a bound holds is the *finding*; the
+      // engines have to be compared on what they resolved, not on whether each
+      // independently decided it was happy.
+      sum: round(tracks.reduce(function (a, b) { return a + b; }, 0))
+    };
+  }
+
+  /** Two decimal places: sub-pixel differences are exactly what this is for. */
+  function round(value) {
+    return Math.round(value * 100) / 100;
+  }
+
+  var results = CASES.map(measure);
+  split.removeAttribute("style");
+
+  var report = {
+    engine: navigator.userAgent,
+    limits: LIM,
+    cases: results
+  };
+  window.__r1 = report;
+  document.getElementById("out").textContent = JSON.stringify(report, null, 1);
+  document.documentElement.setAttribute("data-r1", "done");
+})();
+</script>
+</body>
+</html>

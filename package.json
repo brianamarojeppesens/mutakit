@@ -48,7 +48,8 @@
     "test:unit": "node --test test/unit/",
     "test:browser": "node tools/serve.mjs --run",
     "test": "npm run test:unit && npm run lint && npm run build && npm run test:browser",
-    "serve": "node tools/serve.mjs"
+    "serve": "node tools/serve.mjs",
+    "r1": "node tools/r1-measure.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.62.1",

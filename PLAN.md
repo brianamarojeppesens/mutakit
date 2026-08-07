@@ -3099,6 +3099,28 @@ the M1 exit gate, after fixing defect 1. If pure-CSS clamping fails even for `ne
 either, `split` keeps a JS track solver as a documented exception to P1 — the `anchor` and
 `stack` paths are unaffected either way, which is what bounds this risk.
 
+*Mechanised (draft 8).* The response above was correct and unperformed for two drafts, and
+the reason was not the question's difficulty: `split-grid.html` is interactive, so
+discharging the gate meant a person dragging a gutter in three browsers and reading a
+verdict off the screen. Nobody does that twice, so the numbers were never comparable.
+
+`test/proto/split-grid-measure.html` now asks the same question deterministically — 42
+cases sweeping container widths against requested track sizes, covering each bound from
+both sides, the flexible track with and without a maximum, and the below-Σ-mins case where
+minimums win — and publishes what the engine resolved rather than whether it approved.
+`node tools/r1-measure.mjs` collects that from every installed engine and diffs it against
+the committed Chrome baseline (`test/proto/r1-baseline.json`, 42 cases). The comparison
+keeps two decimal places, because §27.2's own stated signal is a `cap0` that misses the
+exact arithmetic value.
+
+**The gate is now one command, and still open.** An engine that cannot launch is reported
+as *unavailable*, never as agreeing — a gate that counts a missing engine as a pass is
+worse than an open one, because it looks closed. Chrome is measured and committed; Firefox
+and WebKit remain unrun in this environment, which is a confined sandbox with no GTK or
+GStreamer stack (the WebKit binary alone wants 50 absent shared objects, and Firefox is
+additionally refused a user namespace). Running the command anywhere with browsers
+installed discharges the remaining two-thirds.
+
 **R2 — Scope exceeds capacity.** The engine, catalog, accessibility, devtools, and docs are
 plausibly multi-year for a small team. *Signal:* M2 slipping well past M1's elapsed effort.
 *Response:* the tiering in §11 and the milestone gating in §26 exist precisely for this.
@@ -3519,7 +3541,7 @@ reserve space via the inset stack.
 |---|---|---|
 | Application shell | §7.4 `dock`, corner arbitration | ✅ |
 | Recursive splits | §7.3, nested via pane handles | ✅ |
-| Drag separators | §7.3 pointer capture, hit slop, clamping cascade | ✅ *(R1 confirmed in Chrome; FF/Safari pending)* |
+| Drag separators | §7.3 pointer capture, hit slop, clamping cascade | ✅ *(R1 measured in Chrome and committed as a baseline; `node tools/r1-measure.mjs` discharges Firefox/WebKit wherever they are installed — §27.2)* |
 | Keyboard resize | §7.3 `role="separator"`, arrows/Home/End | ✅ |
 | Min / max / collapse | §5.8 clamps, §7.3 `collapsible` | ✅ |
 | Persistence | §19.1 | ⚠️ **gap → fixed** |
