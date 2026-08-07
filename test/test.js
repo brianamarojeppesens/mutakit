@@ -952,6 +952,51 @@ describe("leaks (§23.5)", () => {
 });
 
 describe("extension points (§10)", () => {
+  test("a registered input source is actually started (§10.8, §13.5)", (t) => {
+    let attached = 0;
+    let stopped = 0;
+    let polls = 0;
+    Mutakit.input("acme:probe", {
+      attach(mk) {
+        attached++;
+        const off = mk.scheduler.on("input", () => polls++);
+        return () => { stopped++; off(); };
+      }
+    }, { replace: true });
+
+    // `mk.input()` put the source in the registry and nothing ever called its
+    // `attach` — so the gamepad source, §10.8's one built-in consumer, polled
+    // nothing and fed nothing. Registered, documented, never started.
+    const mk = Mutakit.create({});
+    t.equal(attached, 0, "registration alone starts nothing");
+
+    const host = t.sandbox();
+    host.style.cssText = "position:relative;width:200px;height:150px";
+    mk.mount(host, { sizing: "fixed", size: { w: 200, h: 150 } });
+    t.equal(attached, 1, "mounting a root starts it");
+
+    mk.tick();
+    mk.tick();
+    t.ok(polls >= 2, "and it runs in the INPUT phase, once per frame");
+
+    // A second root must not start a second copy.
+    const other = t.sandbox();
+    other.style.cssText = "position:relative;width:100px;height:100px";
+    mk.mount(other, { sizing: "fixed", size: { w: 100, h: 100 } });
+    t.equal(attached, 1, "a second root does not start it again");
+
+    mk.destroyInstance();
+    t.equal(stopped, 1, "and it is released with the instance");
+
+    // The built-in one, through the same path.
+    const withHud = Mutakit.create({});
+    t.cleanup(() => withHud.destroyInstance());
+    const hudHost = t.sandbox();
+    hudHost.style.cssText = "position:relative;width:100px;height:100px";
+    withHud.mount(hudHost, { sizing: "fixed", size: { w: 100, h: 100 } });
+    t.ok(withHud._inputSources.has("gamepad"), "the gamepad source starts too");
+  });
+
   test("a plugin registers a custom prop type, without importing core (§10.11)", (t) => {
     const { mk, app } = fixture(t);
     mk.use(AcmeWidgets, { unit: 40 });

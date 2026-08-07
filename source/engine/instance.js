@@ -143,9 +143,36 @@ export class MutakitInstance extends Kernel {
     // exists — a second root, or one created by a plugin.
     const pointer = this.services.get("pointer");
     if (pointer) node.own(pointer.observe(node));
+    this._attachInputSources();
     invalidate(node, "arrange");
     this.scheduler.arm();
     return this.handleFor(node);
+  }
+
+  /**
+   * Start the registered input sources (§13.5).
+   *
+   * `mk.input(name, source)` put the source in the registry and nothing ever
+   * called its `attach` — so the gamepad source, the one built-in consumer of
+   * §10.8, polled nothing and fed nothing. Registered, documented, and never
+   * started: the same shape as the gestures pipeline, one layer up.
+   *
+   * On mount rather than at registration, because a source binds to an
+   * instance's scheduler and there may be no instance when a preset registers
+   * one. Once per instance, and disposed with it.
+   */
+  _attachInputSources() {
+    if (!this._inputSources) this._inputSources = new Map();
+    for (const name of this.registry.names("input")) {
+      if (this._inputSources.has(name)) continue;
+      const source = this.registry.get("input", name);
+      if (!source || typeof source.attach !== "function") continue;
+      const stop = this.guard(this.root, `input:${name}.attach`, source.attach, [
+        this,
+        this.options[name] || {}
+      ]);
+      this._inputSources.set(name, typeof stop === "function" ? stop : () => {});
+    }
   }
 
   /** The first mounted root, which is what the namespace-level API targets. */
@@ -1481,6 +1508,10 @@ export class MutakitInstance extends Kernel {
       root.releaseOwned();
     }
     this.roots.length = 0;
+    if (this._inputSources) {
+      for (const stop of this._inputSources.values()) stop();
+      this._inputSources.clear();
+    }
     for (const service of this.services.values()) if (service && service.destroy) service.destroy();
     this.services.clear();
     this.styles.destroy();
