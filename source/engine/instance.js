@@ -68,6 +68,9 @@ export class MutakitInstance extends Kernel {
     this.ids = new Map();
     this.dev = __MK_DEV__ ? { diagnostics: [], frames: 0 } : null;
 
+    /** Bound once — see `resolveBox`, where it is handed to `place()`. */
+    this._anchorLookup = (name) => this.registry.get("anchor", name);
+
     this.scheduler.on("read", (time) => this._read(time));
     this.scheduler.on("arrange", () => this._arrange());
     this.scheduler.on("write", () => this._write());
@@ -1411,8 +1414,11 @@ export class MutakitInstance extends Kernel {
       const options = {
         direction: this.options.direction,
         lenCtx: this.lenContext(frame.w, child),
-        // §10.5's anchor keywords, looked up the way §10.4's units are.
-        anchors: (name) => this.registry.get("anchor", name)
+        // §10.5's anchor keywords, looked up the way §10.4's units are. Bound
+        // once per instance rather than rebuilt here: this runs for every
+        // anchored child on every arranged frame, and a fresh closure per call
+        // is the kind of allocation a 200-node drag notices.
+        anchors: this._anchorLookup
       };
       box = place(container, { w: box.w, h: box.h }, geometry, options);
       const nudge = insetOffset(geometry.at, geometry.inset, options);

@@ -952,6 +952,82 @@ describe("leaks (§23.5)", () => {
 });
 
 describe("extension points (§10)", () => {
+  test("every extension point with a reader works from outside (§10, §1.5.3)", (t) => {
+    const { mk, app } = fixture(t);
+
+    // §1.5.3: a third party adds behaviour without modifying any file in
+    // `source/core/`. §10 asks each point for a non-built-in consumer and
+    // calls that the honest test. Four of these registered into a registry
+    // nothing read until this session, so "it is in the registry" is not the
+    // assertion — "it changed the result" is.
+
+    // §10.3 — a layout algorithm.
+    Mutakit.layout({
+      name: "acme:diagonal", version: "1.0.0",
+      arrange(node, children) {
+        children.forEach((child, i) => {
+          Object.assign(child.computed, { x: i * 20, y: i * 20, w: 50, h: 50 });
+          node.mk.compiler.setRect(child, child.computed);
+        });
+      }
+    }, { replace: true });
+    const diagonal = app.create("pane", { id: "x-diag", algorithm: "acme:diagonal", size: { w: 400, h: 400 } });
+    diagonal.create("pane", { id: "x-d0" });
+    diagonal.create("pane", { id: "x-d1" });
+    mk.tick();
+    t.deepEqual(rect(mk.byId("x-d1")), [20, 20, 50, 50], "the algorithm placed the children");
+
+    // §10.6 — a theme.
+    Mutakit.theme("acme:midnight", { tokens: { "--mk-color-accent": "#123456" } }, { replace: true });
+    mk.applyTheme("acme:midnight", app.node);
+    mk.tick();
+    t.equal(getComputedStyle(app.el).getPropertyValue("--mk-color-accent").trim(), "#123456",
+      "the theme's token reached the DOM");
+
+    // §10.7 — a motion preset. The duration identifies it: a fallback would
+    // animate with the built-in timing instead.
+    Mutakit.motion("acme:slow", {
+      enter: { opacity: [0, 1], duration: 1234 },
+      exit: { opacity: [1, 0], duration: 1234 },
+      reduced: { opacity: [0, 1], duration: 7 }
+    }, { replace: true });
+    mk.define({
+      type: "acme:slowpoke", a11y: "presentation",
+      motion: { enter: "acme:slow", exit: "acme:slow", reduced: "acme:slow" },
+      create: (ctx) => ctx.dom("div")
+    }, { replace: true });
+    const slow = app.create("acme:slowpoke", { id: "x-slow", size: { w: 40, h: 40 } });
+    mk.tick();
+    const animations = slow.el.getAnimations();
+    t.ok(animations.some((a) => a.effect.getTiming().duration === 1234),
+      "the custom preset is what ran");
+
+    // §10.9 — a gesture recognizer, stepped by real pointer events.
+    let ended = 0;
+    Mutakit.gesture("acme:release", {
+      init: () => ({ phase: "possible" }),
+      step: (state, event) => (event.type === "up" ? { ...state, phase: "ended" } : state)
+    }, { replace: true });
+    mk.define({
+      type: "acme:releaser", a11y: { role: "button" }, keys: { Enter: "activate" },
+      create: (ctx) => ctx.dom("div"),
+      mount: (ctx) => ctx.gesture("acme:release", { ended: () => ended++ })
+    }, { replace: true });
+    const releaser = app.create("acme:releaser", {
+      id: "x-rel", at: "top-left", inset: 0, size: { w: 200, h: 150 }
+    });
+    mk.tick();
+    const box = releaser.el.getBoundingClientRect();
+    for (const [type, buttons] of [["pointerdown", 1], ["pointerup", 0]]) {
+      releaser.el.dispatchEvent(new PointerEvent(type, {
+        bubbles: true, cancelable: true, pointerId: 1, pointerType: "mouse",
+        isPrimary: true, clientX: box.left + 10, clientY: box.top + 10, button: 0, buttons
+      }));
+      mk.tick();
+    }
+    t.equal(ended, 1, "the recognizer ran and its handler fired");
+  });
+
   test("a registered anchor keyword and placement strategy are consulted (§10.5)", (t) => {
     const { mk, app } = fixture(t);
 
