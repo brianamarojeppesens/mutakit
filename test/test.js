@@ -2486,6 +2486,37 @@ describe("HUD and game (§11.5, S3)", () => {
     t.close(abilities.node.computed.h, boxes[0].height, 1, "one row tall, not two");
   });
 
+  test("a notification feed grows with its messages and stays inside the frame", async (t) => {
+    const { mk, app } = fixture(t);
+    const hud = app.create("hud-layer", { id: "feed-hud" });
+    // The width only, exactly as an author would write it. The type's default
+    // is `{ w: 320, h: 'auto' }`, and supplying one axis used to discard the
+    // other, which left the feed nought high.
+    const feed = hud.create("notification-feed", {
+      id: "feed-under-test", at: "bottom-right", inset: 16, size: { w: 320 }, ttl: 0
+    });
+    mk.tick();
+    await mk.flush({ animations: false });
+    t.equal(feed.node.geometry.size.h, "auto", "the default height survived a partial size");
+
+    feed.push("Wave cleared");
+    feed.push("Ammo low");
+    mk.tick();
+    await mk.flush({ animations: false });
+
+    // `push` builds its items with `dom.el`, so nothing tells the engine the
+    // content changed — and an auto-sized node is pinned to its last measured
+    // height, so the observer watching it cannot see the growth either. It
+    // measured empty once and stayed that way, anchored to the bottom edge with
+    // every message drawn below it, off the screen.
+    t.ok(feed.node.computed.h > 0, "it has a height once it has messages");
+    const frame = app.node.computed;
+    t.ok(
+      feed.node.computed.y + feed.node.computed.h <= frame.h + 1,
+      "and its bottom edge is inside the frame, not past it"
+    );
+  });
+
   test("hud-* elements are presentational by default, and a meter is not", (t) => {
     const { mk, app } = fixture(t);
     const hud = app.create("hud-layer", { id: "h2" });
@@ -2863,6 +2894,38 @@ describe("ecosystem (§26 M6)", () => {
     t.ok(auto.node.computed.h < 100, "same on the block axis");
     t.close(auto.node.computed.w, auto.el.getBoundingClientRect().width, 1,
       "and the engine's number agrees with the box the browser drew");
+  });
+
+  test("a padded auto-sized node keeps its height when re-measured (§6.5)", async (t) => {
+    const { mk, app } = fixture(t);
+    // Two strategies measure the same node: a forced read on the first frame,
+    // and a ResizeObserver afterwards. The observer reported `contentRect`,
+    // which excludes padding, while the engine writes the result into `--mk-h`
+    // under `box-sizing: border-box`. So a padded element measured its border
+    // box once, then re-measured as its *content* box and shrank by exactly its
+    // padding — every time anything made the observer fire, until it vanished.
+    const item = app.create("pane", {
+      id: "padded", at: "top-left", content: "Item",
+      size: { w: "auto", h: "auto" }, style: { padding: "3px 8px" }
+    });
+    mk.tick();
+    await mk.flush({ animations: false });
+    const first = item.node.computed.h;
+    t.ok(first > 0, "it measured something");
+
+    // Force the observer to fire, repeatedly. A stable measurement survives it.
+    for (let i = 0; i < 3; i++) {
+      item.el.style.width = i % 2 ? "140px" : "150px";
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      await mk.flush({ animations: false });
+    }
+    item.el.style.width = "";
+    await mk.flush({ animations: false });
+
+    t.close(item.node.computed.h, first, 1.5,
+      "the height is the one it started with, not one padding shorter per pass");
+    t.close(item.node.computed.h, item.el.offsetHeight, 1.5,
+      "and it still agrees with the box the browser drew");
   });
 
   test("dock arbitrates its corners and contributes insets to the centre (§7.4)", (t) => {

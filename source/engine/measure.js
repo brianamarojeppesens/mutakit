@@ -56,8 +56,23 @@ export class Measurer {
     if (!node.el || this.observers.has(node)) return;
     const stop = dom.observeResize(node.el, (entries) => {
       for (const entry of entries) {
-        const box = entry.contentRect;
-        const measured = { w: box.width, h: box.height };
+        // The *border* box, because that is what the engine writes back.
+        //
+        // This read `entry.contentRect`, which excludes padding and border,
+        // while the forced-read path below reads `rectOf` — a border box. The
+        // two strategies measured different boxes for the same node, and the
+        // engine writes the result into `--mk-h` under `box-sizing:
+        // border-box`. So the first frame measured 27px and pinned 27px, and
+        // the moment anything made the observer fire it re-measured the same
+        // element as 21px, wrote 21px, which left 15px of content for the
+        // observer to report next time. A padded element shrank by exactly its
+        // padding on every re-measure until it disappeared.
+        //
+        // `offsetBox` rather than `rectOf`: both are border boxes, but
+        // `getBoundingClientRect` includes transforms, and an element mid enter
+        // animation is scaled.
+        const box = dom.offsetBox(entry.target);
+        const measured = { w: box.w, h: box.h };
         if (
           node.measured &&
           Math.abs(node.measured.w - measured.w) < 0.5 &&
