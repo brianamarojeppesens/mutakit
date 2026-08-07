@@ -477,6 +477,13 @@ export interface Instance {
   trait(definition: TraitDefinition, options?: { replace?: boolean }): unknown;
   layout(algorithm: LayoutAlgorithm, options?: { replace?: boolean }): unknown;
   unit(name: string, definition: UnitDefinition, options?: { replace?: boolean }): unknown;
+  /** A custom prop type: return `{ value }` to accept (coercing if useful), `{ error }` to reject. */
+  validator(
+    name: string,
+    check: (value: unknown, descriptor: Record<string, unknown>, path: string) =>
+      { value: unknown } | { error: string },
+    options?: { replace?: boolean }
+  ): unknown;
   theme(name: string, definition: { tokens?: Record<string, string> }): unknown;
   motion(name: string, preset: Record<string, unknown>): unknown;
   gesture(name: string, recognizer: Record<string, unknown>): unknown;

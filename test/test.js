@@ -862,6 +862,31 @@ describe("leaks (§23.5)", () => {
   });
 });
 
+describe("extension points (§10)", () => {
+  test("a plugin registers a custom prop type, without importing core (§10.11)", (t) => {
+    const { mk, app } = fixture(t);
+    mk.use(AcmeWidgets, { unit: 40 });
+
+    // §10 calls itself the complete list, and asks every point for a
+    // non-built-in consumer — "an extension point with no external consumer is
+    // probably wrong". `defineValidator` existed but was reachable only by
+    // importing a core module, which §1.5.3 is precisely about avoiding.
+    const gauge = app.create("acme:gauge", { id: "rack-a", rack: "3U", size: { w: 60, h: 60 } });
+    mk.tick();
+    t.equal(gauge.get("rack"), 3, "the string form is coerced by the plugin's own validator");
+
+    const plain = app.create("acme:gauge", { id: "rack-b", rack: 2, size: { w: 60, h: 60 } });
+    t.equal(plain.get("rack"), 2, "and the number form passes through");
+
+    // A rejection travels the normal prop path: MK3005, which fails loudly in
+    // the development build (P7) and carries the message the plugin wrote.
+    t.throws(
+      () => app.create("acme:gauge", { id: "rack-c", rack: "banana", size: { w: 60, h: 60 } }),
+      /rack units like 3 or "3U"/
+    );
+  });
+});
+
 describe("conformance (§8.7)", () => {
   test("a reduced variant of 'none' is a finding (§17)", (t) => {
     // §17 states it outright: reduced does not mean *none*, because an

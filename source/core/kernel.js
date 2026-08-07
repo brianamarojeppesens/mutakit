@@ -13,6 +13,7 @@ import { resolveDefinition } from "./define.js";
 import { diagnosticError, fail, warn } from "./diagnostics.js";
 import { emit } from "./events.js";
 import { Registry } from "./registry.js";
+import { defineValidator, hasValidator } from "./schema.js";
 import { satisfies } from "./semver.js";
 
 /** The registry every instance inherits from unless `inherit: false`. */
@@ -125,6 +126,36 @@ export class Kernel {
     }
     const record = { name, origin: this._installing || "core", ...definition };
     return this.registry.set("unit", name, record, options);
+  }
+
+  /**
+   * Register a custom prop type — §10's eleventh extension point.
+   *
+   * `defineValidator` has always existed; what did not was a way to reach it
+   * from the public surface, so the only route was importing a core module.
+   * §10 calls itself the complete list and §1.5.3 asks that a third party
+   * extend without touching `source/core/`, which an internal import is at
+   * best the letter of.
+   *
+   * A validator returns `{ value }` to accept — coercing if it likes, which is
+   * what makes `size` turn `8` into `{ w: 8, h: 8 }` — or `{ error }` to
+   * reject with a message the author reads.
+   */
+  validator(name, check, options) {
+    if (!name || typeof check !== "function") {
+      return fail("MK3002", __MK_DEV__ &&
+        `validator '${name}' needs a check function`, { subject: name });
+    }
+    const opts = options || {};
+    if (hasValidator(name) && !opts.replace) {
+      warn("MK4001", __MK_DEV__ &&
+        `prop type '${name}' is already registered; pass { replace: true } to override it`,
+        { subject: name }
+      );
+      return this;
+    }
+    defineValidator(name, check);
+    return this;
   }
 
   /** Register an anchor keyword (§10.5). */

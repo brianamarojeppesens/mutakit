@@ -29,6 +29,18 @@ export const AcmeWidgets = {
       basis: "absolute"
     });
 
+    // ── §10.11 — a custom prop type ─────────────────────────────────────
+    // §10 asks every extension point for a non-built-in consumer, calling it
+    // the honest test. A rack slot is `"3U"` or a bare number, and coercing it
+    // here means every widget that takes one gets the same parsing, the same
+    // error message, and the same value shape without repeating any of it.
+    mk.validator("acme:rack-units", (value) => {
+      if (typeof value === "number" && Number.isInteger(value) && value > 0) return { value };
+      const match = typeof value === "string" && /^(\d+)\s*U$/i.exec(value.trim());
+      if (match) return { value: Number(match[1]) };
+      return { error: `expected rack units like 3 or "3U", got ${JSON.stringify(value)}` };
+    }, { replace: true });
+
     // ── §10.2 — a trait ─────────────────────────────────────────────────
     mk.trait({
       name: "acme:pulse",
@@ -67,7 +79,9 @@ export const AcmeWidgets = {
       props: {
         value: { type: "number", default: 0, min: 0, max: 1, reactive: true },
         label: { type: "string", default: "" },
-        variant: { type: "enum", values: ["arc", "bar"], default: "arc" }
+        variant: { type: "enum", values: ["arc", "bar"], default: "arc" },
+        /** The custom prop type above: `3` and `"3U"` both arrive as `3`. */
+        rack: { type: "acme:rack-units", default: 1 }
       },
       geometry: { defaults: { size: { w: "3u", h: "3u" } } },
       events: ["change", "overload"],

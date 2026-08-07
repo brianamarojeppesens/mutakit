@@ -115,6 +115,8 @@ export const Mutakit = {
   input: (name, source, options) => kernel().input(name, source, options),
   gesture: (name, recognizer, options) => kernel().gesture(name, recognizer, options),
   serializer: (migration, options) => kernel().serializer(migration, options),
+  /** A custom prop type for schemas — §10's eleventh extension point. */
+  validator: (name, check, options) => kernel().validator(name, check, options),
 
   /**
    * Install a plugin into every instance this namespace makes (§8.5).
