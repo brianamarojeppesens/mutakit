@@ -91,6 +91,19 @@ export const modal = {
     const body = dom.el("div", { class: "mk-modal__body" }, el);
     ctx.node.contentEl = body;
     ctx.own(() => dom.remove(body));
+
+    // Hand `initialFocus` to the trait that can act on it.
+    //
+    // The prop has been declared since this type was written and nothing ever
+    // read it — the focus service has supported `{ initial }` the whole time,
+    // but `focus-trap` was attached as a bare string, so it received no options
+    // and the prop was inert. An author asking for a specific control to take
+    // focus got the first tabbable one instead, silently. This is the staging
+    // channel `_attachTraits` reads for exactly this purpose.
+    if (ctx.props.initialFocus) {
+      const staged = ctx.node.state.traitOptions || (ctx.node.state.traitOptions = {});
+      staged["focus-trap"] = { ...staged["focus-trap"], initial: ctx.props.initialFocus };
+    }
     return el;
   },
 
