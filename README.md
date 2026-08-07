@@ -1,5 +1,6 @@
 # Mutakit
 
+[![CI](https://github.com/brianamarojeppesens/mutakit/actions/workflows/ci.yml/badge.svg)](https://github.com/brianamarojeppesens/mutakit/actions/workflows/ci.yml)
 [![version](https://img.shields.io/github/v/tag/brianamarojeppesens/mutakit?label=version&color=0a7bbb)](https://github.com/brianamarojeppesens/mutakit/releases)
 [![license](https://img.shields.io/badge/license-MIT-0a7bbb)](LICENSE)
 [![runtime dependencies](https://img.shields.io/badge/runtime%20deps-0-2ea043)](package.json)
@@ -33,10 +34,15 @@ centred modal in the same vocabulary.
 > scenarios work: recursive splits with persistence (S1), the overlay and form
 > catalog (S2), and the HUD family at frame rate (S3). 58 element types, seven
 > layout algorithms, thirteen traits, nine gesture recognizers, five presets.
-> 151 browser tests, 128 unit tests, zero axe-core violations, and every
+> 154 browser tests, 128 unit tests, zero axe-core violations, and every
 > performance budget met. The risk register and the decision log both close
 > empty: R1, the CSS-delegation bet P1 rests on, is discharged across
 > Chromium, Firefox, and WebKit.
+>
+> Through 1.0.0 the browser suite was run in Chrome, by hand. It now runs in
+> CI on every push, in all three §25.3 baseline engines, and that immediately
+> found two tests asserting things that were never true — see
+> [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 >
 > **Every budget in §20.1 is met.** Core measures 31.70 KB gzipped against 33 KB
 > and the full preset 73.73 KB against 76 KB — figures revised in draft 8 from
@@ -141,9 +147,14 @@ is CORS-blocked. `npm run serve` is the shortest path; the harness loads
 Cross-engine runs use Playwright against the §25.3 baseline:
 
 ```bash
-npx playwright test                       # chromium, firefox, webkit
-MK_ENGINES=chromium,firefox node tools/serve.mjs --run   # TAP output
+npm run test:browser:all   # TAP, all three engines, harness + a11y
+npm run test:bench         # the §20.3 budgets, on their own
+npx playwright test        # the e2e specs, including the R1 prototype
 ```
+
+Both paths run in CI on every push. `node tools/serve.mjs --run` takes
+`MK_ENGINES` (default `chromium`) and `MK_PAGES` (default `harness,a11y`;
+`bench` is opt-in because wall-clock budgets measure the machine).
 
 ### Prototypes
 

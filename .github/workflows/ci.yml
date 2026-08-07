@@ -76,6 +76,14 @@ jobs:
           MK_ENGINES: ${{ matrix.engine }}
           MK_PAGES: harness,a11y
 
+      # The other cross-engine path. playwright.config.mjs and test/e2e/ have
+      # existed since draft 7 and the README documents `npx playwright test` as
+      # *the* cross-engine command, but nothing ran it, so it was free to rot
+      # unnoticed. It also covers something the TAP driver does not: the
+      # split-grid prototype's own PASS/FAIL verdict.
+      - name: e2e specs
+        run: npx playwright test --project=${{ matrix.engine }}
+
   # R1's exit gate (§27.2). Discharged on record, and re-run here so it stays
   # discharged: the question is whether CSS clamping still agrees across
   # engines, and engines ship every few weeks.
