@@ -237,7 +237,22 @@ export class MutakitInstance extends Kernel {
 
     this._validateLayoutProps(node);
     if (options.content !== undefined) this.setContent(node, options.content);
-    if (options.slots) for (const name of Object.keys(options.slots)) this.setSlot(node, name, options.slots[name]);
+    // Both spellings fill a slot: `slots: { body }` and a bare `body`. The
+    // second is what Appendix B writes, and it used to be dropped in silence —
+    // the dialog appeared, empty, with the form and the buttons simply gone.
+    // `slots` wins on a collision, being the explicit one.
+    const declared = definition.slots;
+    if (declared) {
+      for (const name of Object.keys(declared)) {
+        const fill = options.slots && name in options.slots ? options.slots[name] : options[name];
+        if (fill !== undefined) this.setSlot(node, name, fill);
+      }
+    }
+    if (options.slots) {
+      for (const name of Object.keys(options.slots)) {
+        if (!declared || !(name in declared)) this.setSlot(node, name, options.slots[name]);
+      }
+    }
 
     if (node.errored) this._placeholder(node);
 
@@ -401,8 +416,12 @@ export class MutakitInstance extends Kernel {
     const geometry = node.geometry;
     const own = {};
 
+    const slots = definition.slots || null;
     for (const key of Object.keys(options)) {
       if (GEOMETRY_KEYS.has(key)) geometry[key] = options[key];
+      // A key naming a declared slot is a slot fill, not a prop. Props win the
+      // name if a type declares both, since a prop is the narrower claim.
+      else if (slots && slots[key] && !(key in definition.props)) continue;
       else if (!STRUCTURAL_KEYS.has(key)) own[key] = options[key];
     }
     if (options.layout) node.layoutProps = { ...options.layout };
@@ -639,7 +658,10 @@ export class MutakitInstance extends Kernel {
     if (!spec || typeof spec !== "object") return null;
 
     const parentNode = nodeOf(parent) || this.root;
-    const { type, children, panes, regions, content, slots, ...rest } = spec;
+    // `slots` stays in `rest`: filling slots — by the `slots` bag or by a bare
+    // key naming one — belongs to `create`, so both tiers get it from one
+    // place. Doing it here as well built every control twice.
+    const { type, children, panes, regions, content, ...rest } = spec;
     if (!type) {
       return fail("MK3001", __MK_DEV__ &&
         "a declarative node needs a `type`", { subject: JSON.stringify(spec).slice(0, 60) });
@@ -648,18 +670,6 @@ export class MutakitInstance extends Kernel {
     const handle = this.create(type, rest, parentNode);
     if (!handle) return null;
     const node = handle.node;
-
-    // Slots declared as props: `{ type: 'dialog', body: {…} }` is shorthand
-    // for `slots: { body: {…} }` (§18.2).
-    const declaredSlots = node.definition && node.definition.slots;
-    if (declaredSlots) {
-      for (const name of Object.keys(declaredSlots)) {
-        if (rest[name] !== undefined && typeof rest[name] === "object") {
-          this.setSlot(node, name, rest[name]);
-        }
-      }
-    }
-    if (slots) for (const name of Object.keys(slots)) this.setSlot(node, name, slots[name]);
 
     if (panes) this.applyAlgorithm(node, "split", { ...rest, panes });
     else if (regions) this.applyAlgorithm(node, "dock", { ...rest, regions });

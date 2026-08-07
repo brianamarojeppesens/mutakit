@@ -1123,6 +1123,53 @@ describe("overlays (§11.2, §16)", () => {
     t.equal(mk.byId("hidden-pane").node.computed.w, 20, "and the pending work actually happened");
   });
 
+  test("Appendix B.2's S2 dialog builds verbatim, slots and all (§1.5)", (t) => {
+    const { mk } = fixture(t);
+    const saved = [];
+    // PLAN.md Appendix B is the acceptance criteria for §1.5's "under 40 lines"
+    // claim, and it writes slots as bare keys. That spelling used to be dropped
+    // in silence: the dialog appeared, empty, with the form and both buttons
+    // simply gone — the worst possible failure for a declarative surface.
+    const prefs = mk.create("dialog", {
+      id: "prefs-dialog",
+      size: { w: "80%", h: "85%" }, at: "center", of: "viewport",
+      title: "Preferences", dismiss: "light",
+      body: {
+        type: "form", id: "prefs",
+        values: { theme: "dark", fontSize: 13, telemetry: false },
+        schema: { fontSize: { type: "number", min: 8, max: 32, integer: true } },
+        children: [
+          { type: "field", label: "Theme",
+            control: { type: "select", name: "theme", options: ["dark", "light", "system"] } },
+          { type: "field", label: "Font size", control: { type: "number", name: "fontSize" } },
+          { type: "field", label: "Telemetry", control: { type: "switch", name: "telemetry" } }
+        ]
+      },
+      footer: {
+        type: "stack", axis: "x", gap: 8, justify: "end", children: [
+          { type: "button", text: "Cancel", command: "close" },
+          { type: "button", text: "Save", variant: "primary", command: "submit" }
+        ]
+      }
+    });
+    prefs.on("action", (event) => saved.push(event.detail.action));
+    mk.tick();
+
+    t.equal(prefs.el.querySelectorAll(".mk-field").length, 3, "all three fields are built");
+    // Once each. The shorthand lives in `create` and used to live in `build`
+    // too, so every control was built twice — invisible except by counting,
+    // because the duplicate sat directly behind the original.
+    t.equal(prefs.el.querySelectorAll("input, select").length, 3, "and each control exactly once");
+    t.ok(mk.byId("prefs"), "the form is a real element, addressable by id");
+    t.equal(prefs.el.querySelectorAll("button").length, 2, "and both footer buttons exist");
+    t.equal(mk.byId("prefs").values().fontSize, 13, "with the declared values bound");
+
+    // §18.2: a declarative button invokes its dialog's command by name, which
+    // is what keeps the whole tree serializable.
+    prefs.el.querySelectorAll("button")[1].click();
+    t.deepEqual(saved, ["submit"], "and `command: 'submit'` reaches the dialog");
+  });
+
   test("a toast announces through the shared live region and expires", (t) => {
     const { mk, app } = fixture(t);
     const toast = app.create("toast", { id: "saved", text: "Layout saved", ttl: 0 });

@@ -30,34 +30,32 @@ bar.create("button", { text: "Settings…", at: "left", inset: 8, on: { activate
 bar.create("pane", { content: "Ctrl+K for the command palette", at: "right", inset: 12 });
 Mutakit.byId("statusbar").create("pane", { content: "Ready", at: "left", inset: 8 });
 
+// Written the way Appendix B.2 writes it: one declarative tree, slots filled
+// by name, buttons invoking the dialog's own commands (§18.2). Nothing here is
+// a function, so the whole dialog serializes.
 function openSettings() {
   const dialog = Mutakit.create("dialog", {
-    id: "prefs",
-    title: "Settings",
-    description: "Changes apply immediately.",
+    id: "prefs", title: "Settings", description: "Changes apply immediately.",
     size: { w: 480, h: "auto" },
+    body: { type: "form", id: "prefs-form",
+      values: { email: "", port: 8080 },
+      schema: { email: { type: "string", required: true, format: "email" },
+                port: { type: "number", min: 1, max: 65535, integer: true } },
+      children: [
+        { type: "field", label: "Notification email", required: true,
+          control: { type: "text", name: "email", placeholder: "you@example.com" } },
+        { type: "field", label: "Port", description: "1–65535",
+          control: { type: "number", name: "port", min: 1, max: 65535 } }
+      ]
+    },
     actions: [
       { label: "Cancel", command: "cancel" },
       { label: "Save", command: "submit", variant: "primary" }
     ]
   });
-
-  const form = dialog.create("form", {
-    id: "prefs-form",
-    values: { email: "", port: 8080 },
-    schema: {
-      email: { type: "string", required: true, format: "email" },
-      port: { type: "number", min: 1, max: 65535, integer: true }
-    }
-  });
-  const emailField = form.create("field", { id: "email-field", label: "Notification email", required: true });
-  emailField.create("text", { name: "email", placeholder: "you@example.com" });
-  const portField = form.create("field", { id: "port-field", label: "Port", description: "1–65535" });
-  portField.create("number", { name: "port", value: 8080, min: 1, max: 65535 });
-
   dialog.on("action", (event) => {
     if (event.detail.action !== "submit") return;
-    form.submit().then((ok) => {
+    Mutakit.byId("prefs-form").submit().then((ok) => {
       if (ok) Mutakit.create("toast", { text: "Settings saved", variant: "success" });
     });
   });
