@@ -156,7 +156,15 @@ export const combobox = {
       ctx.emit("input", { value: input.value });
     }));
     ctx.own(dom.listen(input, "focus", () => renderOptions(ctx)));
-    ctx.own(dom.listen(input, "blur", () => dom.timer(() => setOpen(ctx, false), 120)));
+    // The timer, not just the listener. A combobox blurred and then destroyed
+    // within the delay left a timer running against a torn-down node — and an
+    // unowned timer is invisible to §23.5's count, which is the one place that
+    // would have said so.
+    ctx.own(
+      dom.listen(input, "blur", () => {
+        ctx.own(dom.timer(() => setOpen(ctx, false), 120));
+      })
+    );
     ctx.own(dom.listen(input, "keydown", (event) => onKey(ctx, event)));
     return el;
   },
