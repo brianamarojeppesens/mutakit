@@ -173,6 +173,79 @@ describe("elements", () => {
 });
 
 describe("error isolation (§8.10)", () => {
+  test("every lifecycle hook is guarded, and the geometry survives it", (t) => {
+    const { mk, app } = fixture(t);
+    // §8.10 says *every* lifecycle hook runs inside a guard. Only `create` was
+    // covered, so the other six were a promise nothing tested. A throw must
+    // leave the node errored, keep its declared geometry so surrounding layout
+    // does not collapse, and leave its siblings untouched.
+    const hooks = ["create", "mount", "update", "measure", "arrange", "paint", "destroy"];
+
+    for (const hook of hooks) {
+      const type = `acme:boom-${hook}`;
+      const definition = {
+        type,
+        a11y: "presentation",
+        geometry: { defaults: { size: { w: 120, h: 40 } } },
+        create: (ctx) => ctx.dom("div"),
+        // PAINT is a self fast-path bit that nothing sets on creation, so the
+        // hook only runs for an element that asks for it (§6.2). Without this
+        // the `paint` case would pass by never being called.
+        mount: hook === "paint" ? (ctx) => ctx.invalidate("paint") : undefined
+      };
+      const boom = () => { throw new Error(`boom ${hook}`); };
+      if (hook === "create") definition.create = boom;
+      else definition[hook] = boom;
+      mk.define(definition, { replace: true });
+
+      const bad = app.create(type, { id: `bad-${hook}`, at: "top-left", inset: 5 });
+      const sibling = app.create("pane", {
+        id: `ok-${hook}`, at: "top-right", inset: 5, size: { w: 50, h: 50 }
+      });
+      mk.tick();
+      if (hook === "update") { bad.set({ hidden: true }); mk.tick(); }
+      if (hook === "destroy") { mk.destroy(bad.node); mk.tick(); }
+
+      t.ok(mk.byId(`ok-${hook}`), `${hook}: the sibling is untouched`);
+      t.deepEqual(rect(sibling), [945, 5, 50, 50], `${hook}: and still laid out`);
+      if (hook !== "destroy") {
+        t.ok(bad.node.errored, `${hook}: the node is marked errored`);
+        t.deepEqual(
+          [bad.node.computed.w, bad.node.computed.h], [120, 40],
+          `${hook}: its declared geometry is preserved`
+        );
+      }
+      mk.destroy(sibling.node);
+      if (!bad.node.destroyed) mk.destroy(bad.node);
+      mk.tick();
+    }
+  });
+
+  test("the error event bubbles, and `propagate` rethrows (§8.10)", (t) => {
+    const { mk, app } = fixture(t);
+    mk.define({ type: "acme:thrower", a11y: "presentation", create() { throw new Error("nope"); } },
+      { replace: true });
+
+    const seen = [];
+    const parent = app.create("pane", { id: "err-parent", size: { w: 200, h: 200 } });
+    parent.on("error", (event) => seen.push(["parent", event.detail.hook]));
+    app.on("error", (event) => seen.push(["root", event.detail.hook]));
+    parent.create("acme:thrower", { id: "err-kid" });
+    mk.tick();
+
+    // §8.10.4: it bubbles the *node* tree, so an application can report a
+    // failure it did not have to be adjacent to.
+    t.deepEqual(seen, [["parent", "create"], ["root", "create"]]);
+
+    // `propagate` is the policy tests want: the same failure, rethrown.
+    const strict = Mutakit.create({ errorPolicy: "propagate" });
+    t.cleanup(() => strict.destroyInstance());
+    const strictApp = strict.mount(t.sandbox(), { sizing: "fixed", size: { w: 100, h: 100 } });
+    strict.define({ type: "acme:thrower2", a11y: "presentation", create() { throw new Error("rethrow me"); } },
+      { replace: true });
+    t.throws(() => { strictApp.create("acme:thrower2", {}); strict.tick(); }, /rethrow me/);
+  });
+
   test("a broken plugin fails without taking the tree down — the M0 demo", (t) => {
     const { mk, app } = fixture(t);
     const records = [];
