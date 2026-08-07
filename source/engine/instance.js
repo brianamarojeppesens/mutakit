@@ -218,6 +218,13 @@ export class MutakitInstance extends Kernel {
     if (!node.contentEl) node.contentEl = element || parentNode.contentEl;
     if (element) {
       element.classList.add(`${this.prefix}-node`, this.className(type));
+      // Written now rather than staged for WRITE. The base stylesheet keys a
+      // child's box ownership off this attribute (§9.1), and READ runs before
+      // WRITE — so on the first frame every child of a flow-owning algorithm
+      // was still absolutely positioned and contributed nothing to its
+      // parent's intrinsic size. An auto-sized container measured empty
+      // exactly once, and that measurement is the one that got written.
+      if (node.algorithm) element.setAttribute("data-mk-algorithm", node.algorithm);
       if (node.id) element.setAttribute("data-mk-id", node.id);
       if (options.class) element.classList.add(...String(options.class).split(/\s+/));
       if (options.style) dom.setStyles(element, options.style);
