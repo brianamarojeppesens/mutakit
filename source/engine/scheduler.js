@@ -13,7 +13,7 @@
  */
 import "../core/dev.js";
 import { warn } from "../core/diagnostics.js";
-import { caf, now, raf } from "../core/dom.js";
+import { caf, now, onVisibilityChange, raf } from "../core/dom.js";
 import { flushEffects, hasPendingEffects, setEffectScheduler } from "../core/signals.js";
 
 export const PHASES = ["input", "state", "read", "arrange", "write", "paint"];
@@ -43,6 +43,16 @@ export class Scheduler {
     // Effects belong to the STATE phase; handing the signal system this
     // scheduler is what integrates the two (§15.1).
     setEffectScheduler(() => this.arm());
+
+    // A frame armed while visible is abandoned the moment the tab is hidden —
+    // the animation frame simply never arrives. Re-arming across the
+    // transition hands it to the timer fallback instead, so the frame is late
+    // rather than lost and nothing awaiting it hangs.
+    this._stopVisibility = onVisibilityChange(() => {
+      if (!this.armed) return;
+      this.disarm();
+      this.arm();
+    });
   }
 
   /** Register a phase handler. Returns a disposer. */
@@ -194,6 +204,7 @@ export class Scheduler {
 
   destroy() {
     this.disarm();
+    if (this._stopVisibility) this._stopVisibility();
     for (const phase of PHASES) this.handlers[phase].length = 0;
     this._onIdle.length = 0;
   }

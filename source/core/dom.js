@@ -243,9 +243,35 @@ export function timer(fn, ms) {
 // Indirected so tests can install a deterministic fake (§23.1) without any
 // module above this one knowing.
 
+/**
+ * A hidden document delivers no animation frames at all — not late ones, none
+ * — so a frame armed just before the tab was backgrounded is never run, and
+ * anything awaiting it waits forever. `await mk.flush()` in a tab the user
+ * switched away from is the case that bites: the work is finished, the promise
+ * is not.
+ *
+ * The fallback is a timer, which browsers keep running (throttled to about a
+ * second) while hidden. That is the right trade in both directions: pending
+ * work still completes, and nothing animates at frame rate in a tab nobody is
+ * looking at — the loop unschedules when idle either way (§6.3).
+ */
+function frameRequest(fn) {
+  if (hidden()) return { timer: setTimeout(() => fn(now()), 16) };
+  return window.requestAnimationFrame(fn);
+}
+
+function frameCancel(handle) {
+  if (handle && handle.timer !== undefined) clearTimeout(handle.timer);
+  else window.cancelAnimationFrame(handle);
+}
+
+function hidden() {
+  return typeof document !== "undefined" && document.visibilityState === "hidden";
+}
+
 let clock = {
-  raf: hasDOM ? (fn) => window.requestAnimationFrame(fn) : (fn) => setTimeout(() => fn(now()), 16),
-  caf: hasDOM ? (id) => window.cancelAnimationFrame(id) : (id) => clearTimeout(id),
+  raf: hasDOM ? frameRequest : (fn) => setTimeout(() => fn(now()), 16),
+  caf: hasDOM ? frameCancel : (id) => clearTimeout(id),
   now: () =>
     typeof performance !== "undefined" && performance.now ? performance.now() : Date.now()
 };
@@ -268,6 +294,12 @@ export function caf(id) {
 
 export function now() {
   return clock.now();
+}
+
+/** Subscribe to the document's visibility. Returns a disposer. */
+export function onVisibilityChange(fn) {
+  if (!hasDOM) return () => {};
+  return listen(document, "visibilitychange", fn);
 }
 
 // ── Reads (READ phase only — §6.4) ───────────────────────────────────────
