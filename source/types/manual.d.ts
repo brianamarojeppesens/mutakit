@@ -204,7 +204,10 @@ export interface Handle {
   build(spec: ElementSpec | ElementSpec[]): Handle | Handle[];
   split(options: SplitOptions): Handle[];
   stack(options?: StackOptions): Handle[] | Handle;
-  dock(options?: Record<string, unknown>): Handle[] | Handle;
+  /** `dock` returns *this* handle — its children are named, not ordered (§7.4). */
+  dock(options?: Record<string, unknown>): Handle;
+  /** A named child of a docked node, by region name or by the id it was given. */
+  region(name: string): Handle | null;
   grid(options?: Record<string, unknown>): Handle[] | Handle;
   free(options?: Record<string, unknown>): Handle[] | Handle;
   flow(options?: Record<string, unknown>): Handle;
@@ -488,6 +491,8 @@ export interface Instance {
   byId(id: string): Handle | null;
   query(selector: string, scope?: Handle): Handle | null;
   queryAll(selector: string, scope?: Handle): Handle[];
+  /** A full-frame host in a named layer band — `mk.layer('hud', …)` (§16.1). */
+  layer(name: string, options?: CommonProps & Record<string, unknown>): Handle;
 
   serialize(scope?: Handle, options?: SerializeOptions): SerializedDocument;
   restore(doc: SerializedDocument, options?: RestoreOptions): Handle[];
@@ -524,6 +529,7 @@ export interface MutakitNamespace {
   query(selector: string, scope?: Handle): Handle | null;
   queryAll(selector: string, scope?: Handle): Handle[];
   build(spec: ElementSpec | ElementSpec[], parent?: Handle): Handle | Handle[];
+  layer(name: string, options?: CommonProps & Record<string, unknown>): Handle;
   adopt(element: Element | string, options?: AdoptOptions, parent?: Handle): Handle;
   serialize(scope?: Handle, options?: SerializeOptions): SerializedDocument;
   restore(doc: SerializedDocument, options?: RestoreOptions): Handle[];

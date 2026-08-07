@@ -74,4 +74,16 @@ Mutakit.define<{ value: number; label: string }>({
   }
 });
 
-export { app, left, stage, bottom };
+// §7.4's named regions and §16.1's layer bands, typed. Both were public API
+// with no declaration until now, so TypeScript users could not call either —
+// `tsc` sees this file, which is what keeps that from happening twice.
+const shell = app.dock({
+  regions: { top: { id: "menubar", size: 36 }, center: { id: "body" } }
+});
+const body = shell.region("body");
+if (body) body.create("pane", { id: "workspace" });
+
+const hud = Mutakit.layer("hud", { of: "viewport" });
+hud.create("pane", { id: "reticle", at: "center", size: { w: 24, h: 24 } });
+
+export { app, left, stage, bottom, shell, hud };

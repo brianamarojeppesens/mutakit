@@ -41,6 +41,16 @@ try {
   check("danger token is red-600", getComputedStyle(app.el).getPropertyValue("--mk-color-danger").trim(), "#dc2626");
   check("dev prose stripped", /declares no a11y semantics/.test(document.currentScript.previousElementSibling.src || "") ? "leaked" : "stripped", "stripped");
   check("modal role", modal.el.getAttribute("role"), "dialog");
+
+  // §12.1 in the *shipped* artifact, which is where it matters: the built
+  // bundle uses the constructable-stylesheet path, and the layer order has to
+  // reach the document from there or an author's restyle silently loses.
+  const authored = document.createElement("style");
+  authored.textContent = "@layer mutakit.user { .mk-modal { border-radius: 0px; } }";
+  document.head.appendChild(authored);
+  check("an author restyles from mutakit.user, no !important",
+    getComputedStyle(modal.el).borderRadius, "0px");
+  authored.remove();
 } catch (error) {
   checks.push("FAIL threw → " + error.message);
 }
