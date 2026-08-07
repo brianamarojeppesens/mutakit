@@ -369,12 +369,22 @@ export const notificationFeed = {
         const oldest = ctx.state.items.shift();
         dom.remove(oldest);
       }
+      // The feed's height is `auto`, and this builds its items with `dom.el`
+      // rather than through the node API — so nothing told the engine the
+      // content changed. An auto-sized node is *pinned* to its last measured
+      // height, which means the ResizeObserver watching it can never see growth
+      // either: it observes the pinned box. The feed measured empty once, at
+      // create, and stayed nought high for the rest of its life. Anchored to
+      // the bottom-right that put every message below the bottom edge of the
+      // screen, half off it, which is exactly where they were reported.
+      ctx.invalidate("measure");
       if (ctx.props.ttl > 0) {
         ctx.own(
           dom.timer(() => {
             const index = ctx.state.items.indexOf(item);
             if (index !== -1) ctx.state.items.splice(index, 1);
             dom.remove(item);
+            ctx.invalidate("measure");
             ctx.emit("expire", { message });
           }, ctx.props.ttl)
         );
@@ -448,6 +458,20 @@ export const keyPrompt = {
       border-radius: 3px;
       font-family: var(--mk-font-mono);
       font-size: var(--mk-text-sm);
+      /*
+       * A key cap is centred and never narrower than it is tall.
+       *
+       * The size is auto, so the engine measures the glyph and pins the
+       * result — and a text measurement lands on a fraction of a pixel. Pinned
+       * as a border box that left about seven pixels of content for a glyph
+       * wanting a little more, so the letter sat against the right border with
+       * the left padding intact. A min-width beats a width in the cascade, so
+       * the cap keeps its shape whatever the measurement rounds to, and one
+       * letter is centred in it rather than flush to a side.
+       */
+      min-width: 1.9em;
+      text-align: center;
+      line-height: 1.35;
     }
   `
 };
