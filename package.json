@@ -59,6 +59,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/brianamarojeppesen/mutakit.git"
+    "url": "git+https://github.com/brianamarojeppesens/mutakit.git"
+  },
+  "homepage": "https://github.com/brianamarojeppesens/mutakit#readme",
+  "bugs": {
+    "url": "https://github.com/brianamarojeppesens/mutakit/issues"
   }
 }
