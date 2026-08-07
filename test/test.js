@@ -417,11 +417,43 @@ describe("traits (§9)", () => {
     t.equal(document.activeElement, button.el, "focus() lands");
     // Dispatched rather than awaited: a headless or unfocused window delivers
     // the real focus event late or not at all, and that is a property of the
-    // window manager, not of the trait.
-    button.el.dispatchEvent(new FocusEvent("focus"));
+    // window manager, not of the trait. `focusin` is what a browser emits
+    // alongside `focus`, and unlike `focus` it bubbles — which is what lets one
+    // listener serve both the element itself and a native control it wraps.
+    button.el.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
     t.deepEqual(seen, ["focus"]);
     mk.tick();
     t.equal(button.el.getAttribute("data-mk-focused"), "");
+  });
+
+  test("a wrapped native control is the tab stop, not its wrapper (§11.3, §14)", (t) => {
+    const { mk, app } = fixture(t);
+    // §11.3's controls wrap a native element and `create` returns the wrapper,
+    // so the trait was putting `tabindex="0"` on a plain div in front of the
+    // input. Every field was two tab stops, the first an unlabelled group.
+    const field = app.create("field", { id: "tab-field", label: "Name" });
+    const text = field.create("text", { id: "tab-text", name: "n" });
+    mk.tick();
+
+    const wrapper = text.el;
+    const input = wrapper.querySelector("input");
+    t.ok(input, "the control wraps a native input");
+    t.equal(wrapper.getAttribute("tabindex"), null, "the wrapper is not a tab stop");
+    t.equal(input.getAttribute("tabindex"), null, "and the input needs no help to be one");
+
+    const focus = mk.service("focus");
+    const stops = focus.tabbable(field.el);
+    t.equal(stops.length, 1, "one tab stop for one control");
+    t.equal(stops[0], input, "and it is the input itself");
+
+    // State still tracks, which is what `focusin` bubbling buys: `focus` does
+    // not bubble, so a listener on the wrapper never saw the inner control.
+    const seen = [];
+    text.on("focus", () => seen.push("focus"));
+    input.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    mk.tick();
+    t.deepEqual(seen, ["focus"], "focus on the inner control reaches the node");
+    t.equal(wrapper.getAttribute("data-mk-focused"), "");
   });
 
   test("an unknown trait is reported and skipped, not fatal", (t) => {
