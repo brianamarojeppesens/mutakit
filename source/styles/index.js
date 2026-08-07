@@ -165,6 +165,26 @@ export const BASE_CSS = css`
   }
 
   .mk-node {
+    /*
+     * Custom properties inherit, and these four must not.
+     *
+     * Without this reset a node the engine has not sized reads its *parent's*
+     * width, so the auto fallback below is unreachable anywhere but the root:
+     * an auto size silently resolved to the parent's width, and measuring an
+     * auto-sized node returned the parent's box rather than its own content.
+     * Setting a custom property to "initial" makes it guaranteed-invalid,
+     * which is exactly what makes var() take its fallback — and the engine's
+     * inline write still wins over this rule, so nothing the engine does size
+     * is affected.
+     *
+     * The inset properties are deliberately left inheriting: §12.4 publishes
+     * them for authors, and a child reading its ancestor's safe-area inset is
+     * the point of them.
+     */
+    --mk-x: initial;
+    --mk-y: initial;
+    --mk-w: initial;
+    --mk-h: initial;
     position: absolute;
     left: var(--mk-x, 0px);
     top: var(--mk-y, 0px);
