@@ -1799,6 +1799,65 @@ describe("ecosystem (§26 M6)", () => {
     t.equal(typeof mk.persist, "function", "and a created instance has the preset's plugins");
   });
 
+  test("every algorithm's computed rects match the boxes the browser drew (P1)", (t) => {
+    // The sweep, rather than one scenario. `anchor` was drawing every node in
+    // the wrong place and no test noticed, because every layout test asserted
+    // `node.computed` and none had ever compared it against the DOM. This walks
+    // each algorithm's subtree and checks the two agree.
+    const scenarios = {
+      split: (app) => app.split({
+        axis: "x", gutter: { size: 6, draggable: true },
+        panes: [{ id: "z-a", size: 200 }, { id: "z-b", size: "1fr" }, { id: "z-c", size: "1fr" }]
+      }),
+      dock: (app) => app.dock({
+        regions: { top: { id: "z-t", size: 40 }, start: { id: "z-s", size: 200 }, center: { id: "z-c2" } }
+      }),
+      stack: (app) => {
+        const s = app.create("stack", { id: "z-sk", axis: "y", gap: 8, size: { w: 300, h: 400 } });
+        s.create("pane", { id: "z-k1", content: "one" });
+        s.create("pane", { id: "z-k2", content: "two" });
+      },
+      grid: (app) => {
+        app.grid({ columns: ["1fr", "2fr"], rows: ["100px", "1fr"] });
+        app.create("pane", { id: "z-g1" });
+        app.create("pane", { id: "z-g2" });
+      },
+      free: (app) => {
+        app.free({});
+        app.create("pane", { id: "z-f1", at: "top-left", inset: 20, size: { w: 100, h: 80 } });
+        app.create("pane", { id: "z-f2", at: "top-left", inset: { left: 20, top: 200 }, size: { w: 100, h: 80 } });
+      },
+      // `flow` computes nothing itself — the boxes are read back in READ, and
+      // before that every one of them serialized as zero (§7.6).
+      flow: (app) => {
+        app.flow({ gap: 8 });
+        app.create("pane", { id: "z-w1", content: "aa" });
+        app.create("pane", { id: "z-w2", content: "bb" });
+      }
+    };
+
+    for (const name of Object.keys(scenarios)) {
+      const { mk, app } = fixture(t);
+      scenarios[name](app);
+      mk.tick();
+
+      const nodes = [];
+      const walk = (node) => { for (const child of node.children) { nodes.push(child); walk(child); } };
+      walk(app.node);
+
+      for (const node of nodes) {
+        if (!node.el || node.el.offsetParent === null) continue;
+        const parentBox = (node.parent.el || app.el).getBoundingClientRect();
+        const drawn = node.el.getBoundingClientRect();
+        const label = `${name}: ${node.type}#${node.id || "?"}`;
+        t.close(drawn.left - parentBox.left, node.computed.x, 1.5, `${label} x`);
+        t.close(drawn.top - parentBox.top, node.computed.y, 1.5, `${label} y`);
+        t.close(drawn.width, node.computed.w, 1.5, `${label} w`);
+        t.close(drawn.height, node.computed.h, 1.5, `${label} h`);
+      }
+    }
+  });
+
   test("what the engine computes is where the browser draws it (P1)", (t) => {
     const { mk, app, host } = fixture(t);
     // Every test until this one asserted `node.computed`, so nothing noticed
