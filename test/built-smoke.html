@@ -13,7 +13,7 @@
 -->
 <pre id="out">running…</pre>
 <script src="/build/mutakit.min.js"></script>
-<script>
+<script type="module">
 const checks = [];
 function check(name, actual, expected) {
   const ok = String(actual) === String(expected);
@@ -29,7 +29,12 @@ try {
   const modal = Mutakit.create("modal", { id: "dlg", title: "Built", backdrop: false });
   Mutakit.tick();
 
-  check("version", Mutakit.VERSION, "0.9.0");
+  // Against the manifest, not a literal: a hardcoded version turns every
+  // release into a failing smoke test, which trains people to ignore it.
+  // What is worth asserting is that the *artifact* and the *build metadata*
+  // agree — a stale `build/` is exactly what this page exists to catch.
+  const expected = await fetch("../build/manifest.json").then((r) => r.json()).then((m) => m.version);
+  check("version matches the manifest", Mutakit.VERSION, expected);
   check("split left width", Math.round(l.node.computed.w), 200);
   check("split right width", Math.round(r.node.computed.w), 794);
   check("surface is 80% of its pane", Math.round(surface.node.computed.w), Math.round(794 * 0.8));
@@ -39,7 +44,14 @@ try {
   check("modal radius (element CSS survived)", getComputedStyle(modal.el).borderRadius, "10px");
   check("accent token (tokens CSS survived)", getComputedStyle(app.el).getPropertyValue("--mk-color-accent").trim(), "#2563eb");
   check("danger token is red-600", getComputedStyle(app.el).getPropertyValue("--mk-color-danger").trim(), "#dc2626");
-  check("dev prose stripped", /declares no a11y semantics/.test(document.currentScript.previousElementSibling.src || "") ? "leaked" : "stripped", "stripped");
+  // Read the bundle, do not infer from a script element's `src`. The old form
+  // tested a URL string for diagnostic prose, which could only ever say
+  // "stripped" — it was passing for the wrong reason, and `document.
+  // currentScript` being null under `type=module` is what exposed it.
+  const bundle = await fetch("../build/mutakit.min.js").then((r) => r.text());
+  check("dev prose stripped",
+    /declares no a11y semantics|is not declared in the props schema/.test(bundle) ? "leaked" : "stripped",
+    "stripped");
   check("modal role", modal.el.getAttribute("role"), "dialog");
 
   // §12.1 in the *shipped* artifact, which is where it matters: the built
