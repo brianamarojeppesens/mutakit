@@ -32,14 +32,40 @@ class GlobalKernel extends MutakitInstance {
 let globalKernel = null;
 let defaultInstance = null;
 
+/**
+ * What `Mutakit.use()` has been asked to install, so every instance gets it.
+ *
+ * A preset installs its plugins through the namespace, and before this the
+ * only instance that received them was the lazily created default — so
+ * `Mutakit.create({ theme: 'dark' })` handed back an instance with no
+ * `persist`, no `store`, and no way to know why, since the failure was a bare
+ * TypeError on a method that simply was not there.
+ *
+ * This is the same relationship the registry already has (§8.6): the *list* is
+ * shared, the *state* is not. Each instance still gets its own `install(mk)`
+ * call and its own returned handle, so P8 holds — and `inherit: false` opts
+ * out of both, as it already did for definitions.
+ */
+const installed = [];
+
 function kernel() {
   if (!globalKernel) globalKernel = new GlobalKernel();
   return globalKernel;
 }
 
 function instance() {
-  if (!defaultInstance || defaultInstance.destroyed) defaultInstance = new MutakitInstance();
+  if (!defaultInstance || defaultInstance.destroyed) {
+    defaultInstance = new MutakitInstance();
+    // Also what makes `reset()` safe: a fresh default instance used to come
+    // back stripped of every plugin the preset had installed into the old one.
+    applyPlugins(defaultInstance);
+  }
   return defaultInstance;
+}
+
+function applyPlugins(mk) {
+  for (const entry of installed) mk.use(entry.plugin, entry.options);
+  return mk;
 }
 
 export const Mutakit = {
@@ -54,7 +80,9 @@ export const Mutakit = {
    */
   create(typeOrOptions, props) {
     if (typeof typeOrOptions === "string") return instance().create(typeOrOptions, props);
-    return new MutakitInstance(typeOrOptions);
+    const mk = new MutakitInstance(typeOrOptions);
+    if (!typeOrOptions || typeOrOptions.inherit !== false) applyPlugins(mk);
+    return mk;
   },
 
   /** Mount a root frame. Returns a handle (§5.11). */
@@ -88,8 +116,17 @@ export const Mutakit = {
   gesture: (name, recognizer, options) => kernel().gesture(name, recognizer, options),
   serializer: (migration, options) => kernel().serializer(migration, options),
 
-  /** Install a plugin into the default instance (§8.5). */
+  /**
+   * Install a plugin into every instance this namespace makes (§8.5).
+   *
+   * Recorded before it is applied, so an instance created later — or a default
+   * instance recreated after `reset()` — gets the same set. `use()` on an
+   * instance directly still installs into that one alone.
+   */
   use(plugin, options) {
+    for (const one of Array.isArray(plugin) ? plugin : [plugin]) {
+      if (one) installed.push({ plugin: one, options });
+    }
     instance().use(plugin, options);
     return this;
   },
