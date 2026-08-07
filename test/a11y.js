@@ -134,14 +134,51 @@ const missing = Mutakit.registry
   .type.map((entry) => entry.name)
   .filter((name) => !rendered.includes(name) && !name.includes(":"));
 
+let extraFailures = 0;
+
 const options = {
   // The library's own surface, not the harness chrome around it.
   runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "best-practice"] }
 };
 
+/**
+ * Every ARIA relationship must point at an element that exists.
+ *
+ * axe does not flag an orphaned `<label for>` or a dangling
+ * `aria-describedby` — the rules that would are scoped to the referencing
+ * element's role, so a reference into nothing passes. It is still broken:
+ * clicking such a label does nothing and a screen reader announces a
+ * relationship the DOM cannot honour. This found five of them.
+ */
+const IDREF_ATTRIBUTES = [
+  "for", "aria-labelledby", "aria-describedby", "aria-controls",
+  "aria-owns", "aria-activedescendant", "aria-errormessage", "aria-details"
+];
+
+function danglingReferences(root) {
+  const bad = [];
+  for (const attribute of IDREF_ATTRIBUTES) {
+    for (const el of root.querySelectorAll(`[${attribute}]`)) {
+      const value = el.getAttribute(attribute).trim();
+      if (!value) {
+        bad.push(`${el.tagName.toLowerCase()}.${el.className.split(" ")[0]} has an empty ${attribute}`);
+        continue;
+      }
+      for (const id of value.split(/\s+/)) {
+        if (document.getElementById(id)) continue;
+        bad.push(`${el.tagName.toLowerCase()}.${el.className.split(" ")[0]} ${attribute} → #${id}, which does not exist`);
+      }
+    }
+  }
+  return bad;
+}
+
 window.axe
   .run(host, options)
   .then((axeResults) => {
+    const dangling = danglingReferences(host);
+    if (dangling.length) report("dangling ARIA reference", dangling.slice(0, 6));
+    extraFailures = dangling.length ? 1 : 0;
     for (const violation of axeResults.violations) {
       report(
         `${violation.id} (${violation.impact})`,
@@ -175,7 +212,7 @@ function report(name, details) {
 }
 
 function finish(axeResults) {
-  const failed = axeResults.violations.length + (missing.length ? 1 : 0);
+  const failed = axeResults.violations.length + (missing.length ? 1 : 0) + extraFailures;
   summary.textContent = `${rendered.length} types · ${axeResults.passes.length} checks passed · ${failed} violation(s)`;
   summary.className = `summary ${failed ? "fail" : "pass"}`;
   if (!failed) {

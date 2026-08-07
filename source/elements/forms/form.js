@@ -48,7 +48,14 @@ export const field = {
     const el = ctx.dom("div", { class: `mk-field mk-field--${ctx.props.layout}` }, null);
 
     const labelId = `${id}-label`;
-    const label = dom.el("label", { class: "mk-field__label", id: labelId, for: `${id}-input` }, el);
+    // No `for` yet. It used to be set here, optimistically, against an id the
+    // control would later be given — and a field whose control is not
+    // labelable (a button, a toggle group, a fieldset) never got one, leaving a
+    // `<label for>` pointing at nothing. Clicking it does nothing and a screen
+    // reader announces an orphan. `wire()` sets it when it finds a control and
+    // removes it when there is none, so the attribute is never a promise the
+    // DOM cannot keep. axe does not flag this, which is why it stood.
+    const label = dom.el("label", { class: "mk-field__label", id: labelId }, el);
     dom.setText(label, ctx.props.label);
     if (ctx.props.required) {
       label.appendChild(dom.el("span", { class: "mk-field__required", "aria-hidden": "true", text: " *" }));
@@ -111,7 +118,13 @@ export const field = {
 /** Link label, description, and error to whatever control landed in the slot. */
 function wire(ctx) {
   const control = ctx.state.body && ctx.state.body.querySelector("input, select, textarea, [role]");
-  if (!control) return;
+  if (!control) {
+    // A field can legitimately wrap something unlabelable. The group's own
+    // `aria-labelledby` still names it (§11.3), so the label element stays —
+    // it just stops claiming to be `for` an element that is not there.
+    ctx.state.label.removeAttribute("for");
+    return;
+  }
   if (ctx.state.wired === control && ctx.state.wiredError === ctx.props.error) return;
   ctx.state.wired = control;
   ctx.state.wiredError = ctx.props.error;
