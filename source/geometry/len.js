@@ -16,6 +16,7 @@
  */
 import "../core/dev.js";
 import { fail, warn } from "../core/diagnostics.js";
+import { isSignal } from "../core/signals.js";
 
 /** Node kinds. Kept as short strings — they appear in serialized fixtures. */
 export const PX = "px";
@@ -423,7 +424,15 @@ function evaluate(node, ctx) {
       }
     }
     case COMPUTED:
-      return node.fn(ctx);
+      // A signal is a function too, and the difference is not cosmetic: a
+      // computed length is *called with the context*, while calling a signal
+      // accessor with an argument **writes** to it. Passing a store slice as a
+      // size therefore did not merely fail to resolve — it overwrote the
+      // stored value with the length context, silently, on the first arrange.
+      //
+      // Read with no arguments and re-parse, so a slice holding `240` and one
+      // holding `'50%'` both mean what they say.
+      return isSignal(node.fn) ? toNumber(parse(node.fn()), ctx) : node.fn(ctx);
     default:
       return NaN;
   }

@@ -505,6 +505,36 @@ export class MutakitInstance extends Kernel {
         })
       );
     }
+    this._bindSignalGeometry(node);
+  }
+
+  /**
+   * The same for geometry, which is not a prop (§15.2).
+   *
+   * A signal in `size`, `inset`, or an edge resolves correctly the first time —
+   * `Len` re-reads it on every arrange — so the value was never wrong. It was
+   * only ever *stale*: nothing invalidated the node when the signal changed,
+   * so the box kept whatever the last arrange happened to compute, and a store
+   * slice driving a pane's width moved when something else forced a frame and
+   * not otherwise.
+   *
+   * Only the node is invalidated, not the tree: geometry is the parent's
+   * business, which is what `invalidateGeometry` already encodes.
+   */
+  _bindSignalGeometry(node) {
+    for (const key of Object.keys(node.geometry)) {
+      const value = node.geometry[key];
+      for (const signal of signalsIn(value)) {
+        node.own(
+          effect(() => {
+            signal();
+            if (node.destroyed) return;
+            invalidate(node, MEASURE | ARRANGE);
+            invalidateGeometry(node);
+          })
+        );
+      }
+    }
   }
 
   /** Update props, validating through the schema and calling `update()`. */
@@ -625,6 +655,21 @@ export class MutakitInstance extends Kernel {
     if (typeof content === "string" || typeof content === "number") {
       dom.setText(host, content); // never parsed as HTML (§21.4)
       target.content = content;
+      return target;
+    }
+    // A signal before a producer function. Both are callable, and the
+    // difference is destructive rather than cosmetic: calling a signal
+    // accessor with an argument *writes* to it, so `content: someSignal`
+    // replaced the signal's value with the element's own `ctx` — silently, on
+    // create, before anything had a chance to render it.
+    if (isSignal(content)) {
+      const bound = content;
+      target.own(
+        effect(() => {
+          const next = bound();
+          if (!target.destroyed) this.setContent(target, next);
+        })
+      );
       return target;
     }
     if (typeof content === "function") {
@@ -1535,6 +1580,20 @@ export class MutakitInstance extends Kernel {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────
+
+/**
+ * Signals reachable in a geometry value — `240`, `{ w: signal }`, `[a, b]`.
+ * One level of nesting is all the geometry vocabulary has (§5.3).
+ */
+function signalsIn(value) {
+  if (isSignal(value)) return [value];
+  if (!value || typeof value !== "object") return [];
+  const out = [];
+  for (const inner of Object.keys(value)) {
+    if (isSignal(value[inner])) out.push(value[inner]);
+  }
+  return out;
+}
 
 /** Per-instance service factories, contributed by presets and plugins. */
 const SERVICE_FACTORIES = new Map();
