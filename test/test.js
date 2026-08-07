@@ -586,6 +586,130 @@ describe("leaks (§23.5)", () => {
     t.equal(counters.elements, baseline.elements, "elements");
     t.equal(app.node.children.length, 0, "and the node tree is empty again");
   });
+
+  test("the types that own traps, timers, and portals also come back clean", async (t) => {
+    const { mk, app } = fixture(t);
+    mk.tick();
+    // `pane` and `stack` own almost nothing, so the check above passes without
+    // exercising the places a disposer is actually easy to miss: a focus trap,
+    // a dismissal listener, a toast's timer, a submenu, an overlay portalled
+    // out of the tree it was declared in.
+    const cases = {
+      modal: () => mk.create("modal", { title: "t" }),
+      dialog: () => mk.create("dialog", { title: "t", actions: [{ label: "OK", command: "submit" }] }),
+      popover: () => mk.create("popover", { reference: { x: 100, y: 100 } }),
+      tooltip: () => mk.create("tooltip", { text: "hi", reference: { x: 100, y: 100 } }),
+      menu: () => mk.create("menu", {
+        reference: { x: 50, y: 50 },
+        items: [{ label: "a" }, { label: "b", items: [{ label: "c" }] }]
+      }),
+      toast: () => mk.create("toast", { text: "x", ttl: 0 }),
+      drawer: () => mk.create("drawer", {}),
+      window: () => app.create("window", { title: "w", size: { w: 200, h: 150 } }),
+      tabs: () => app.create("tabs", { items: [{ id: "a", label: "A" }, { id: "b", label: "B" }] }),
+      form: () => app.create("form", {
+        values: { n: "" },
+        children: [{ type: "field", label: "N", control: { type: "text", name: "n" } }]
+      }),
+      combobox: () => app.create("combobox", { options: ["a", "b"] }),
+      slider: () => app.create("slider", { min: 0, max: 10, value: 5 }),
+      "context-menu": () => app.create("pane", {
+        size: { w: 50, h: 50 },
+        traits: ["context-menu"],
+        "context-menu": { items: [{ label: "a" }] }
+      })
+    };
+
+    for (const name of Object.keys(cases)) {
+      // One round-trip before the baseline. A lazily created service — focus,
+      // layers, motion — installs listeners on first use and keeps them for
+      // the instance's lifetime, which is not a leak but does land between a
+      // cold baseline and the first teardown. What is being measured is the
+      // steady state: ten more round-trips must cost exactly nothing.
+      // Destroying is not tearing down: a type with an exit animation sits in
+      // `exiting` until the animation is drained, and its disposers have not
+      // run yet. Counting before that drain measures a modal mid-exit and
+      // calls it a leak — which is what this test did on its first run, and
+      // the top-layer hosts still open in the document made it look real.
+      const cycle = async () => {
+        const handle = cases[name]();
+        mk.tick();
+        if (handle && handle.node && !handle.node.destroyed) mk.destroy(handle.node);
+        await mk.flush({ animations: false });
+        mk.tick();
+      };
+
+      await cycle(); // warm up: a lazily created service keeps its listeners
+      const baseline = { ...counters };
+      for (let i = 0; i < 10; i++) await cycle();
+      // §23.5 names listeners, observers, and nodes. Timers are deliberately
+      // not asserted here: they are a *global* count, and a tooltip's 100ms
+      // hide or a toast's ttl from an earlier case fires partway through a
+      // later one — so the number moves for reasons that have nothing to do
+      // with the type being measured. `toast` below asserts them where they
+      // are actually the subject.
+      t.equal(counters.listeners, baseline.listeners, `${name}: listeners`);
+      t.equal(counters.observers, baseline.observers, `${name}: observers`);
+      t.equal(counters.elements, baseline.elements, `${name}: elements`);
+    }
+    // §16.2's host dialogs live outside the tree they belong to, so a missed
+    // disposer strands them in `document.body` where nothing else would look.
+    t.equal(document.querySelectorAll("dialog.mk-top-layer").length, 0,
+      "and no top-layer host was left behind");
+  });
+
+  test("a timer that fired is not also cancelled, and every timer is owned", async (t) => {
+    const { mk, app } = fixture(t);
+    mk.tick();
+    const baseline = counters.timers;
+
+    // A `toast` arms its own dismissal timer, so this exercises the path where
+    // a timer runs to completion *and* its disposer runs at teardown. Both
+    // decremented, so the count fell below baseline and the next thing
+    // measured looked like it had leaked — a detector reporting the wrong
+    // subject, which is worse than one reporting nothing.
+    for (let i = 0; i < 5; i++) {
+      const toast = app.create("toast", { text: "x", ttl: 5 });
+      mk.tick();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      if (!toast.node.destroyed) mk.destroy(toast.node);
+      await mk.flush({ animations: false });
+    }
+    mk.tick();
+    t.equal(counters.timers, baseline, "timers return to baseline, not below it");
+
+    // And a timer created *inside* an owned listener is owned too — otherwise
+    // it survives its element and is invisible to this count.
+    const combo = app.create("combobox", { id: "leak-combo", options: ["a", "b"] });
+    mk.tick();
+    const input = combo.el.querySelector("input");
+    input.dispatchEvent(new FocusEvent("blur", { bubbles: true }));
+    mk.destroy(combo.node);
+    await mk.flush({ animations: false });
+    await new Promise((resolve) => setTimeout(resolve, 160));
+    t.equal(counters.timers, baseline, "a blur timer does not outlive its combobox");
+  });
+
+  test("an unowned listener is rejected at define(), before it can leak (P7)", (t) => {
+    const { mk } = fixture(t);
+    // The counters only see listeners added through `dom.listen`, so a raw
+    // `addEventListener` would leak *past* the test above. Conformance is what
+    // actually closes that hole, and it closes it at registration rather than
+    // at teardown — which is the difference between a diagnostic naming the
+    // type and a count that is merely wrong.
+    t.throws(
+      () => mk.define({
+        type: "acme:leaky",
+        a11y: "presentation",
+        create(ctx) {
+          const el = ctx.dom("div");
+          el.addEventListener("click", () => {});
+          return el;
+        }
+      }),
+      /MK3007/
+    );
+  });
 });
 
 describe("conformance (§8.7)", () => {
