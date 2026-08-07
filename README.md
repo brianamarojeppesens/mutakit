@@ -30,9 +30,15 @@ centred modal in the same vocabulary.
 > layout algorithms, eight traits, five presets. 88 browser tests, 88 unit
 > tests, zero axe-core violations, and every performance budget met.
 >
-> **1.0 is gated on one item**: the size budget (§20.1) — the full preset is
-> 2.0× over and core 3.8×. Every build reports it; `--strict-budget` fails on
-> it. `PLAN.md` is the design source of truth; `source/` is the implementation
+> **1.0 is gated on one item**: the size budget (§20.1). Core measures 29.65 KB
+> gzipped against 8.5 KB, and the full preset 60.64 KB against 32 KB. The
+> per-module accounting is in
+> [`docs/size-accounting.md`](docs/size-accounting.md), which finds that the
+> estimate has no row for the four largest modules in the engine and proposes
+> an evidenced revision. Every build reports the overage; `--strict-budget`
+> fails on it until §20.1 is amended, which is the maintainer's call.
+>
+> `PLAN.md` is the design source of truth; `source/` is the implementation
 > source of truth.
 
 ## The premise

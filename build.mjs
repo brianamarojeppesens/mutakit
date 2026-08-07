@@ -285,7 +285,7 @@ function report(result) {
     if (preset.gzip > budget) {
       console.error(
         `  ! ${preset.preset} is ${kb(preset.gzip)} gzipped against a ${kb(budget)} budget ` +
-          `(${delta.toFixed(1)}x) — §20.1`
+          `(${delta.toFixed(1)}x) — §20.1 · see docs/size-accounting.md`
       );
       over = true;
     }

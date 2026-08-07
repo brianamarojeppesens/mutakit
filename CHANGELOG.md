@@ -23,6 +23,26 @@ size budget (§20.1), which is 2.0× over for the full preset and 3.8× for core
   inside a comment inside a tagged template ends the template and the rest of
   the file is parsed as code. That shipped twice.
 
+### Measured
+
+- **`docs/size-accounting.md`** — the per-module accounting §20.5 point 6 asks
+  for when a measurement comes in over its estimate, worked group by group
+  against §20.5's own rows.
+
+  The load-bearing finding: §20.5's Engine row lists six modules totalling an
+  estimated 5.7 KB. Those six measure 9.1 KB — ordinary drift. The other
+  **25.5 KB is in four modules the table has no row for**: `engine/instance.js`
+  (element lifecycle, content interop, identity, error isolation, trait
+  attachment, the ARRANGE pass), `engine/handle.js`, `engine/ctx.js`, and
+  `engine/styles.js`. Each is a section of the plan the estimate did not cost;
+  `instance.js` alone is larger than the whole estimated core.
+
+  4.3 KB gzipped of genuine waste was removed first, so the finding is about
+  what remains rather than about what had not been tried. The document proposes
+  a revision to ≤ 30 KB core / ≤ 62 KB full — ~1% above today's measurement, so
+  the next kilobyte still fails the build — and leaves §20.1 itself alone,
+  because the budget is the maintainer's call.
+
 ### Fixed — all four found by the accessibility audit, none by review
 
 - **A destructive button measured 3.76:1** against WCAG AA's 4.5:1 for normal
