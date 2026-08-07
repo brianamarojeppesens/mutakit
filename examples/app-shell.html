@@ -97,14 +97,25 @@ function openSettings() {
 const workspace = Mutakit.byId("workspace");
 
 Mutakit.default.service("shortcuts").bind("Mod+K", () => {
+  // The combobox is declared as the modal's body rather than created after it.
+  // `focus-trap` installs during mount and focuses the first tabbable thing it
+  // can find; a child added afterwards is not there yet, so the palette opened
+  // with focus on the dialog itself and the input just sat there until it was
+  // clicked. Declaring it means it exists before the trap looks, and
+  // `initialFocus` names it explicitly rather than relying on tab order.
   const palette = Mutakit.create("modal", {
-    id: "palette", size: { w: 520, h: "auto" }, at: "top", inset: { top: 80 },
-    dismiss: "light", backdrop: true, title: "Command palette"
+    // A height, not `auto`. The body scrolls, and the combobox's option list
+    // lives inside it — at auto height the list had nowhere to go and was
+    // clipped to a couple of pixels the moment it opened.
+    id: "palette", size: { w: 520, h: 320 }, at: "top", inset: { top: 80 },
+    dismiss: "light", backdrop: true, title: "Command palette",
+    initialFocus: "input",
+    body: {
+      type: "combobox", id: "palette-input", placeholder: "Type a command",
+      options: ["Open Settings", "Toggle sidebar", "Reset layout"]
+    }
   });
-  const combo = palette.create("combobox", {
-    id: "palette-input", placeholder: "Type a command",
-    options: ["Open Settings", "Toggle sidebar", "Reset layout"]
-  });
+  const combo = Mutakit.byId("palette-input");
   combo.on("change", (event) => {
     palette.close();
     if (event.detail.value === "Open Settings") openSettings();
