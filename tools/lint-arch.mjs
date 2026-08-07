@@ -26,7 +26,14 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SOURCE = path.join(ROOT, "source");
 
 /** The layer map of §4.1, lowest first. A layer may not import from above it. */
-const LAYERS = ["core", "geometry", "engine", "layout", "traits", "services", "elements", "styles", "entries"];
+const LAYERS = [
+  "core", "geometry", "engine", "layout", "traits", "services", "elements",
+  // `plugins` sits above the catalog: a bundled plugin is architecturally a
+  // third-party one that happens to live in this repository (P3), so it may
+  // reach anything an external plugin could.
+  "plugins",
+  "styles", "entries"
+];
 
 /** `styles` is a leaf: it holds strings and is imported by anything. */
 const LEAF_LAYERS = new Set(["styles"]);

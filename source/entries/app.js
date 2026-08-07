@@ -37,7 +37,9 @@ export function installOverlays(mk) {
 export const overlaysPlugin = {
   name: "mutakit-overlays",
   version: Mutakit.VERSION,
-  requires: { mutakit: "^0.4.0 || ^1" },
+  // `^0.4.0` would exclude 0.5 and later: under SemVer every 0.x minor is a
+  // breaking change, and these plugins track the library rather than a line of it.
+  requires: { mutakit: ">=0.4.0 <2" },
   install: installOverlays
 };
 

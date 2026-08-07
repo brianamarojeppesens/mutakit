@@ -17,6 +17,26 @@
 import { Mutakit, splitsPlugin, persistencePlugin } from "./dock.js";
 import { overlaysPlugin } from "./app.js";
 import { hudPlugin } from "./hud.js";
+import { ThemeService } from "../services/theme.js";
+import { registerService } from "../engine/instance.js";
+import { adaptersPlugin, customElementsPlugin, dslPlugin } from "../plugins/authoring.js";
+import { devtoolsPlugin } from "../plugins/devtools.js";
 
-export { Mutakit, splitsPlugin, persistencePlugin, overlaysPlugin, hudPlugin };
+registerService("theme", () => new ThemeService());
+Mutakit.use(dslPlugin);
+Mutakit.use(adaptersPlugin);
+
+export {
+  Mutakit,
+  splitsPlugin,
+  persistencePlugin,
+  overlaysPlugin,
+  hudPlugin,
+  dslPlugin,
+  adaptersPlugin,
+  // Opt-in rather than installed: custom elements cannot be undefined once
+  // registered, and devtools has no business in a production page (§19.3).
+  customElementsPlugin,
+  devtoolsPlugin
+};
 export default Mutakit;

@@ -1,0 +1,9 @@
+{
+  "name": "acme-widgets",
+  "version": "1.2.0",
+  "description": "A third-party Mutakit plugin, published from outside the library's repository.",
+  "type": "module",
+  "main": "./index.js",
+  "peerDependencies": { "mutakit": ">=0.4.0 <2" },
+  "license": "MIT"
+}

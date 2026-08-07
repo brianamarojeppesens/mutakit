@@ -4,6 +4,53 @@ All notable changes to Mutakit are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/).
 
+## [0.9.0] — M6: ecosystem and polish
+
+The devtools plugin, the DSL and custom-element plugins, the `dock`, `grid`,
+`flow`, and `free` algorithms, `window` and `tabs`, the theming system, the
+framework adapters, the documentation set, and the external-plugin example
+§10 requires (PLAN.md §26 M6).
+
+### Added
+
+- **`dock`, `grid`, `flow`, `free`** (§7.4–§7.7), completing the algorithm
+  catalog. `dock` arbitrates its corners and contributes each non-overlay
+  region to the centre's inset stack under its own name; `free` cascades new
+  children so windows do not stack at one point, and keeps one dragged off an
+  edge grabbable.
+- **`tabs`, `accordion`, `scroll`, `window`** (§11.1, §11.2). A `window` is
+  three composed traits and a title bar — the composition is the implementation.
+- **The DSL** (§18.3) — compiles to tier 2 and has no capabilities of its own,
+  which is the property that keeps the object form canonical and §19's
+  persistence story intact. No `eval`, no `new Function`, so it runs under a
+  strict CSP.
+- **Custom elements** (§18.4) and **framework adapters** (§10.14). The adoption
+  contract is what makes each adapter a few dozen lines: the framework asks for
+  a box, renders into it, and owns it; Mutakit only sizes and positions it.
+- **Devtools** (§19.3) with the constraint explainer — for a selected node it
+  reports every constraint and which ones §5.8 dropped, which is the question
+  the whole priority system exists to make answerable.
+- **`examples/acme-widgets/`** — a third-party plugin with its own
+  `package.json`, importing nothing from `source/`, exercising a unit, a trait,
+  an element type, and a layout algorithm through `mk` alone. Installing it with
+  `mk.use()` is M6's completion criterion, and it is now a test.
+- **The documentation set** (§24): concepts, one guide per driving scenario,
+  the plugin guide, recipes, and runnable examples for S1, S2, and S3.
+
+### Fixed
+
+- `resizable` referenced a namespace import the module did not have, so every
+  `window` failed to build its title bar — caught by error isolation and
+  reported, which is exactly what that machinery is for.
+- `tabs` synced its panels only in `create`, before the panels existed, leaving
+  every one of them visible and in the tab order. Same shape as the `field`
+  bug in 0.7.0, and the same fix.
+- The DSL reported every error one line early: its tokenizer counted newlines
+  to the start of the *whitespace* before a token rather than to the token.
+- Bundled plugins declared `requires: { mutakit: '^0.4.0' }`, which excludes
+  0.5 and later — under SemVer every 0.x minor is a breaking change. They
+  track the library, not one line of it.
+
 ## [0.8.0] — M5: HUD and game (S3)
 
 `hud-layer` and the `hud-*` family, custom units, the gamepad input source,

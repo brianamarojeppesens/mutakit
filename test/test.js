@@ -11,6 +11,9 @@ import { persistencePlugin } from "../source/services/persistence.js";
 import { counters } from "../source/core/dom.js";
 import * as mkSplit from "../source/layout/split.js";
 import * as mkInput from "../source/services/input.js";
+import { compileDSL, adaptersPlugin } from "../source/plugins/authoring.js";
+import { devtoolsPlugin } from "../source/plugins/devtools.js";
+import { AcmeWidgets } from "../examples/acme-widgets/index.js";
 
 /** Mount a fresh, deterministically sized instance for one test. */
 function fixture(t, options) {
@@ -1365,6 +1368,225 @@ describe("HUD and game (§11.5, S3)", () => {
     // Two custom properties per bar per frame is the whole write cost.
     const perFrame = (mk.compiler.writes - writesBefore) / 10;
     t.ok(perFrame <= 100 * 3, `${perFrame} property writes per frame, no layout`);
+  });
+});
+
+
+describe("ecosystem (§26 M6)", () => {
+  test("a plugin published from outside the repository installs with mk.use()", (t) => {
+    // The milestone's completion criterion, and the honest test of §10: the
+    // plugin has its own package.json, imports nothing from source/, and
+    // reaches the library only through the `mk` it is handed.
+    const { mk, app } = fixture(t);
+    mk.use(AcmeWidgets, { unit: 40 });
+
+    t.ok(mk.plugins.has("acme-widgets"));
+    t.equal(mk.plugins.get("acme-widgets").version, "1.2.0");
+
+    const rack = app.create("pane", { id: "rack", left: 0, top: 0, width: 200, height: 400 });
+    mk.applyAlgorithm(rack.node, "acme:rack", { gap: 4 });
+    const gauge = rack.create("acme:gauge", { id: "g1", label: "Gain", layout: { units: 2 } });
+    rack.create("acme:gauge", { id: "g2", layout: { units: 1 } });
+    mk.tick();
+
+    // The unit, the element, the trait, and the algorithm, all at once.
+    t.equal(gauge.el.getAttribute("role"), "meter", "its a11y declaration was honoured");
+    t.deepEqual(rect(gauge), [0, 0, 200, 80], "2u at 40px, placed by acme:rack");
+    t.deepEqual(rect(mk.byId("g2")), [0, 84, 200, 40], "and the gap is the algorithm's");
+    t.ok(gauge.node.traits.has("acme:pulse"), "its own trait attached");
+
+    gauge.setValue(0.5);
+    t.equal(gauge.get("value"), 0.5, "and its command became a handle method");
+  });
+
+  test("a plugin's contributions deregister without destroying live elements (§8.5)", (t) => {
+    const { mk, app } = fixture(t);
+    const records = [];
+    mk.use(AcmeWidgets, {});
+    const live = app.create("acme:gauge", { id: "survivor" });
+    mk.tick();
+
+    Mutakit.diagnostics.sink((record) => records.push(record));
+    t.cleanup(() => Mutakit.diagnostics.sink(null));
+    mk.unuse("acme-widgets");
+
+    t.equal(live.node.destroyed, false, "existing instances keep working");
+    t.ok(records.some((r) => r.code === "MK4014"), "and the situation is reported, with a count");
+    t.throws(() => mk.create("acme:gauge", {}, app.node), /MK3001/, "only new ones fail");
+  });
+
+  test("the DSL compiles to tier 2 and has no capabilities of its own (§18.3)", (t) => {
+    const spec = compileDSL(`
+      split x gutter:6 {
+        pane #sidebar 240 min:160 max:35%
+        pane #main 1fr
+      }
+    `);
+    t.equal(spec.type, "split");
+    t.equal(spec.axis, "x");
+    t.equal(spec.gutter, 6);
+    t.equal(spec.children.length, 2);
+    t.equal(spec.children[0].id, "sidebar");
+    t.equal(spec.children[0].layout.size, 240);
+    t.equal(spec.children[0].layout.min, 160);
+    t.equal(spec.children[1].layout.size, "1fr");
+  });
+
+  test("the DSL builds the same tree the object form does", (t) => {
+    const { mk, app } = fixture(t);
+    const fromObjects = mk.build(
+      {
+        type: "split",
+        axis: "x",
+        gutter: 6,
+        children: [
+          { type: "pane", id: "a1", layout: { size: 240 } },
+          { type: "pane", id: "b1", layout: { size: "1fr" } }
+        ]
+      },
+      app.node
+    );
+    mk.tick();
+    const objectSnapshot = [rect(mk.byId("a1")), rect(mk.byId("b1"))];
+
+    const second = fixture(t);
+    second.mk.build(compileDSL("split x gutter:6 { pane #a2 240 pane #b2 1fr }"), second.app.node);
+    second.mk.tick();
+    t.deepEqual([rect(second.mk.byId("a2")), rect(second.mk.byId("b2"))], objectSnapshot,
+      "one semantic model, three notations (§18)");
+  });
+
+  test("a DSL syntax error points at the line", (t) => {
+    t.throws(() => compileDSL("split x {\n  240px\n}"), /line 2/);
+  });
+
+  test("dock arbitrates its corners and contributes insets to the centre (§7.4)", (t) => {
+    const { mk, app } = fixture(t);
+    mk.applyAlgorithm(app.node, "dock", {
+      corners: "horizontal",
+      regions: {
+        top: { size: 40, id: "menubar" },
+        bottom: { size: 24, id: "statusbar" },
+        start: { size: 260, id: "explorer" },
+        center: { id: "workspace" }
+      }
+    });
+    mk.tick();
+
+    t.deepEqual(rect(mk.byId("menubar")), [0, 0, 1000, 40], "top spans the full width");
+    t.deepEqual(rect(mk.byId("statusbar")), [0, 776, 1000, 24]);
+    t.deepEqual(rect(mk.byId("explorer")), [0, 40, 260, 736], "the rail runs between them");
+    t.deepEqual(rect(mk.byId("workspace")), [260, 40, 740, 736], "and the centre takes the rest");
+  });
+
+  test("free places new children by cascade and keeps them grabbable (§7.7)", (t) => {
+    const { mk, app } = fixture(t);
+    mk.applyAlgorithm(app.node, "free", { bounds: "container", placement: "cascade", keepVisible: 24 });
+    const a = app.create("window", { id: "w1", title: "One", size: { w: 300, h: 200 } });
+    const b = app.create("window", { id: "w2", title: "Two", size: { w: 300, h: 200 } });
+    mk.tick();
+
+    t.notEqual(a.node.computed.x, b.node.computed.x, "windows do not stack at one point");
+    a.constrain({});
+    a.node.layoutProps.x = -1000;
+    mk.tick();
+    t.ok(a.node.computed.x > -300, "and one dragged off the edge stays grabbable");
+  });
+
+  test("a window composes drag, resize, and recency stacking", (t) => {
+    const { mk, app } = fixture(t);
+    mk.applyAlgorithm(app.node, "free", {});
+    const first = app.create("window", { id: "win1", title: "First" });
+    const second = app.create("window", { id: "win2", title: "Second" });
+    mk.tick();
+
+    t.ok(first.node.traits.has("draggable") && first.node.traits.has("resizable"));
+    t.equal(first.el.querySelector(".mk-window__bar").textContent.includes("First"), true);
+    t.equal(second.el.querySelector('[aria-label="Close"]') !== null, true);
+
+    const layers = mk.service("layers");
+    t.equal(layers.topOf("docked"), second.node);
+    layers.bringToFront(first.node);
+    t.equal(layers.topOf("docked"), first.node, "raised within its band, never across one");
+  });
+
+  test("tabs are one tab stop with roving focus and inert panels", (t) => {
+    const { mk, app } = fixture(t);
+    const group = app.create("tabs", {
+      id: "docs",
+      items: [{ id: "one", label: "One" }, { id: "two", label: "Two" }],
+      active: "one",
+      closable: true
+    });
+    group.create("pane", { id: "one", content: "first" });
+    group.create("pane", { id: "two", content: "second" });
+    mk.tick();
+
+    const tabButtons = group.el.querySelectorAll('[role="tab"]');
+    t.equal(tabButtons.length, 2);
+    t.equal(tabButtons[0].getAttribute("aria-selected"), "true");
+    t.equal(tabButtons[1].getAttribute("tabindex"), "-1");
+    t.equal(mk.byId("two").el.hasAttribute("inert"), true, "a hidden panel is out of the tab order");
+
+    key(group.el.querySelector(".mk-tabs__list"), "ArrowRight");
+    mk.tick();
+    t.equal(group.get("active"), "two");
+    t.equal(mk.byId("one").el.hasAttribute("inert"), true);
+  });
+
+  test("devtools explains a dropped constraint (§19.3)", (t) => {
+    const { mk, app } = fixture(t);
+    mk.use(devtoolsPlugin);
+    Mutakit.diagnostics.sink(() => {});
+    t.cleanup(() => Mutakit.diagnostics.sink(null));
+
+    // Genuinely over-constrained: left, right, *and* width on one axis. (§5.6's
+    // own `{right, top, bottom, width}` example is not — that is two per axis.)
+    app.create("pane", { id: "rail", left: 0, right: 0, width: 320, top: 0, height: 100 });
+    mk.tick();
+
+    const explained = mk.devtools.explain("rail");
+    t.deepEqual(explained.dropped, ["x.size"], "the over-constrained axis names its victim");
+    t.ok(/§5.8/.test(explained.note));
+    t.equal(explained.ownedBy.includes("anchor"), true);
+
+    const tree = mk.devtools.tree();
+    t.equal(tree.children.length, 1);
+    t.deepEqual(tree.children[0].rect, [0, 0, 1000, 100], "the size yielded to the edges");
+
+    const profile = mk.devtools.profile();
+    t.ok(profile.frames > 0 && profile.averageMs >= 0);
+  });
+
+  test("a theme applies per subtree, not per page (§12.3)", (t) => {
+    const { mk, app } = fixture(t);
+    const theme = mk.service("theme");
+    const panel = app.create("pane", { id: "inspector", size: { w: 200, h: 200 } });
+    mk.tick();
+
+    theme.apply(app, { theme: "light", density: "comfortable" });
+    theme.apply(panel, { theme: "dark" });
+    t.equal(app.el.getAttribute("data-mk-theme"), "light");
+    t.equal(app.el.getAttribute("data-mk-density"), "comfortable");
+    t.equal(panel.el.getAttribute("data-mk-theme"), "dark",
+      "a dark inspector inside a light application needs no special support");
+  });
+
+  test("the adapters hand out a box and take nothing else (§8.8)", (t) => {
+    const { mk, app } = fixture(t);
+    mk.use(adaptersPlugin);
+    const portal = mk.portal({ id: "react-root", size: { w: 200, h: 100 }, at: "top-left" }, app.node);
+    mk.tick();
+
+    const owned = document.createElement("p");
+    owned.textContent = "rendered by someone else";
+    portal.el.appendChild(owned);
+
+    t.equal(portal.handle.node.computed.w, 200, "Mutakit sizes it");
+    t.equal(portal.el.contains(owned), true, "and touches nothing inside");
+    portal.destroy();
+    mk.tick();
+    t.equal(portal.handle.node.destroyed, true);
   });
 });
 

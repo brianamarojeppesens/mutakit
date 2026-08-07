@@ -10,7 +10,8 @@
  * guessed at.
  */
 import "../core/dev.js";
-import { listen } from "../core/dom.js";
+import * as dom from "../core/dom.js";
+const { listen } = dom;
 import { warn } from "../core/diagnostics.js";
 
 /** Algorithms that place children in flow and therefore own their boxes. */
@@ -249,3 +250,144 @@ export const collapsible = {
     ctx.setState("collapsed", null);
   }
 };
+
+/**
+ * `resizable` (§9) — eight handles, aspect lock, min/max, keyboard resize.
+ *
+ * Subject to the same arbitration rule as `draggable` (§9.1): a pane inside a
+ * split is resized by its gutters, not by corner handles, and attaching this
+ * there reports MK2011 with a pointer to `split`'s own `min`/`max`.
+ */
+export const resizable = {
+  name: "resizable",
+  version: "1.0.0",
+  requires: ["focusable"],
+  events: ["resizestart", "resize", "resizeend"],
+  keys: {
+    "Shift+ArrowLeft": "narrower",
+    "Shift+ArrowRight": "wider",
+    "Shift+ArrowUp": "shorter",
+    "Shift+ArrowDown": "taller"
+  },
+
+  attach(ctx, options) {
+    const opts = options || {};
+    if (!arbitrate(ctx)) return {};
+    ctx.node.positioning = "self";
+
+    const handles = opts.handles || ["n", "e", "s", "w", "ne", "se", "sw", "nw"];
+    const state = { active: null };
+
+    for (const direction of handles) {
+      const handle = ctx.dom("span", {
+        class: `mk-resize-handle mk-resize-handle--${direction}`,
+        "data-mk-handle": direction,
+        "aria-hidden": "true"
+      });
+      ctx.own(dom.listen(handle, "pointerdown", (event) => startResize(ctx, state, opts, direction, event)));
+    }
+
+    ctx.own(dom.listen(ctx.el, "pointermove", (event) => moveResize(ctx, state, opts, event)));
+    ctx.own(dom.listen(ctx.el, "pointerup", () => endResize(ctx, state)));
+    ctx.own(dom.listen(ctx.el, "pointercancel", () => endResize(ctx, state, true)));
+    ctx.own(dom.listen(ctx.el, "keydown", (event) => onResizeKey(ctx, opts, event)));
+
+    return {
+      get resizing() {
+        return !!state.active;
+      },
+      resizeBy(dw, dh) {
+        applyResize(ctx, opts, ctx.node.computed.w + dw, ctx.node.computed.h + dh);
+      }
+    };
+  }
+};
+
+function startResize(ctx, state, opts, direction, event) {
+  event.preventDefault();
+  event.stopPropagation();
+  event.target.setPointerCapture(event.pointerId);
+  state.active = {
+    direction,
+    pointerId: event.pointerId,
+    origin: { x: event.clientX, y: event.clientY },
+    from: { ...ctx.node.computed }
+  };
+  ctx.setState("resizing", true);
+  ctx.emit("resizestart", { direction });
+}
+
+function moveResize(ctx, state, opts, event) {
+  if (!state.active) return;
+  const { direction, origin, from } = state.active;
+  const dx = event.clientX - origin.x;
+  const dy = event.clientY - origin.y;
+
+  let w = from.w + (direction.includes("e") ? dx : direction.includes("w") ? -dx : 0);
+  let h = from.h + (direction.includes("s") ? dy : direction.includes("n") ? -dy : 0);
+  let x = from.x + (direction.includes("w") ? dx : 0);
+  let y = from.y + (direction.includes("n") ? dy : 0);
+
+  if (opts.aspect) {
+    // Aspect lock follows whichever axis moved further, so the box never
+    // fights the pointer.
+    const ratio = typeof opts.aspect === "number" ? opts.aspect : from.w / from.h;
+    if (Math.abs(dx) > Math.abs(dy)) h = w / ratio;
+    else w = h * ratio;
+  }
+
+  const bounded = applyResize(ctx, opts, w, h);
+  ctx.constrain({
+    left: direction.includes("w") ? x + (w - bounded.w) : from.x,
+    top: direction.includes("n") ? y + (h - bounded.h) : from.y
+  });
+  ctx.emit("resize", { ...bounded, direction });
+}
+
+function applyResize(ctx, opts, w, h) {
+  const min = opts.min || {};
+  const max = opts.max || {};
+  const width = Math.min(Math.max(w, min.w == null ? 32 : min.w), max.w == null ? Infinity : max.w);
+  const height = Math.min(Math.max(h, min.h == null ? 32 : min.h), max.h == null ? Infinity : max.h);
+  ctx.constrain({ width, height, size: undefined });
+  return { w: width, h: height };
+}
+
+function endResize(ctx, state, cancelled) {
+  if (!state.active) return;
+  const { from } = state.active;
+  state.active = null;
+  ctx.setState("resizing", false);
+  if (cancelled) ctx.constrain({ width: from.w, height: from.h, left: from.x, top: from.y });
+  ctx.emit("resizeend", { cancelled: !!cancelled });
+}
+
+/** The keyboard equivalent: Shift+arrows resize by a step. */
+function onResizeKey(ctx, opts, event) {
+  if (!event.shiftKey) return;
+  const step = opts.step || 16;
+  const map = {
+    ArrowLeft: [-step, 0],
+    ArrowRight: [step, 0],
+    ArrowUp: [0, -step],
+    ArrowDown: [0, step]
+  };
+  const move = map[event.key];
+  if (!move) return;
+  event.preventDefault();
+  applyResize(ctx, opts, ctx.node.computed.w + move[0], ctx.node.computed.h + move[1]);
+  ctx.emit("resizeend", { cancelled: false });
+}
+
+/** Handles are drawn by CSS; the trait only listens. */
+export const RESIZE_HANDLE_CSS = `
+  .mk-resize-handle { position: absolute; width: 8px; height: 8px; z-index: 2; }
+  .mk-resize-handle--n { top: -4px; left: 8px; right: 8px; width: auto; cursor: ns-resize; }
+  .mk-resize-handle--s { bottom: -4px; left: 8px; right: 8px; width: auto; cursor: ns-resize; }
+  .mk-resize-handle--e { right: -4px; top: 8px; bottom: 8px; height: auto; cursor: ew-resize; }
+  .mk-resize-handle--w { left: -4px; top: 8px; bottom: 8px; height: auto; cursor: ew-resize; }
+  .mk-resize-handle--ne { top: -4px; right: -4px; cursor: nesw-resize; }
+  .mk-resize-handle--se { bottom: -4px; right: -4px; cursor: nwse-resize; }
+  .mk-resize-handle--sw { bottom: -4px; left: -4px; cursor: nesw-resize; }
+  .mk-resize-handle--nw { top: -4px; left: -4px; cursor: nwse-resize; }
+`;

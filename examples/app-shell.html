@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mutakit — S2, the application chrome</title>
+<style>html,body{margin:0;height:100%;font:14px/1.5 system-ui,sans-serif}</style>
+</head>
+<body>
+<!--
+  S2 — the application chrome (PLAN.md §1.3): a docked shell, a settings dialog
+  with validation, a command palette, a context menu, and toasts. The M3/M4 demo.
+-->
+<script type="module">
+import { Mutakit } from "../source/entries/full.js";
+
+const app = Mutakit.mount(document.body, { sizing: "viewport" });
+
+app.dock({
+  regions: {
+    top:    { size: 44, id: "menubar" },
+    start:  { size: 240, id: "explorer" },
+    bottom: { size: 26, id: "statusbar" },
+    center: { id: "workspace" }
+  }
+});
+
+const bar = Mutakit.byId("menubar");
+bar.create("button", { text: "Settings…", at: "left", inset: 8, on: { activate: openSettings } });
+bar.create("pane", { content: "Ctrl+K for the command palette", at: "right", inset: 12 });
+Mutakit.byId("statusbar").create("pane", { content: "Ready", at: "left", inset: 8 });
+
+function openSettings() {
+  const dialog = Mutakit.create("dialog", {
+    id: "prefs",
+    title: "Settings",
+    description: "Changes apply immediately.",
+    size: { w: 480, h: "auto" },
+    actions: [
+      { label: "Cancel", command: "cancel" },
+      { label: "Save", command: "submit", variant: "primary" }
+    ]
+  });
+
+  const form = dialog.create("form", {
+    id: "prefs-form",
+    values: { email: "", port: 8080 },
+    schema: {
+      email: { type: "string", required: true, format: "email" },
+      port: { type: "number", min: 1, max: 65535, integer: true }
+    }
+  });
+  const emailField = form.create("field", { id: "email-field", label: "Notification email", required: true });
+  emailField.create("text", { name: "email", placeholder: "you@example.com" });
+  const portField = form.create("field", { id: "port-field", label: "Port", description: "1–65535" });
+  portField.create("number", { name: "port", value: 8080, min: 1, max: 65535 });
+
+  dialog.on("action", (event) => {
+    if (event.detail.action !== "submit") return;
+    form.submit().then((ok) => {
+      if (ok) Mutakit.create("toast", { text: "Settings saved", variant: "success" });
+    });
+  });
+}
+
+// A command palette on Mod+K, and a context menu anywhere in the workspace.
+const workspace = Mutakit.byId("workspace");
+workspace.create("pane", { content: "Right-click me. Press Ctrl+K.", at: "center" });
+
+Mutakit.default.service("shortcuts").bind("Mod+K", () => {
+  const palette = Mutakit.create("modal", {
+    id: "palette", size: { w: 520, h: "auto" }, at: "top", inset: { top: 80 },
+    dismiss: "light", backdrop: true, title: "Command palette"
+  });
+  const combo = palette.create("combobox", {
+    id: "palette-input", placeholder: "Type a command",
+    options: ["Open Settings", "Toggle sidebar", "Reset layout"]
+  });
+  combo.on("change", (event) => {
+    palette.close();
+    if (event.detail.value === "Open Settings") openSettings();
+    else Mutakit.create("toast", { text: `${event.detail.value} — not wired in this demo` });
+  });
+}, { description: "Command palette" });
+
+workspace.el.addEventListener("contextmenu", (event) => {
+  event.preventDefault();
+  Mutakit.create("menu", {
+    reference: { x: event.clientX, y: event.clientY, w: 0, h: 0 },
+    items: [
+      { label: "Cut", shortcut: "Ctrl+X" },
+      { label: "Copy", shortcut: "Ctrl+C" },
+      { separator: true },
+      { label: "Paste", disabled: true }
+    ]
+  });
+});
+</script>
+</body>
+</html>

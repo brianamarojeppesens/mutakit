@@ -1207,6 +1207,10 @@ export class MutakitInstance extends Kernel {
     child.computed.w = box.w;
     child.computed.h = box.h;
     child.sizeIsFixed = x.mode === "fixed" && y.mode === "fixed";
+    // Recorded so devtools can answer "why is my box the wrong size" (§5.8).
+    // The priority system is only worth having if the outcome is inspectable.
+    const dropped = [...x.dropped.map((n) => `x.${n}`), ...y.dropped.map((n) => `y.${n}`)];
+    child.droppedConstraints = dropped.length ? dropped : null;
     this.compiler.setRect(child, child.computed);
     return child.computed;
   }

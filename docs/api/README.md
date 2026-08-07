@@ -5,6 +5,7 @@ docs, and devtools from one declaration, so these pages cannot drift (§24).
 
 ## Element types
 
+- [`accordion`](./accordion.md)
 - [`alert`](./alert.md)
 - [`banner`](./banner.md)
 - [`button`](./button.md)
@@ -34,6 +35,7 @@ docs, and devtools from one declaration, so these pages cannot drift (§24).
 - [`popover`](./popover.md)
 - [`radio-group`](./radio-group.md)
 - [`resizer`](./resizer.md)
+- [`scroll`](./scroll.md)
 - [`search`](./search.md)
 - [`segmented`](./segmented.md)
 - [`select`](./select.md)
@@ -43,6 +45,7 @@ docs, and devtools from one declaration, so these pages cannot drift (§24).
 - [`stack`](./stack.md)
 - [`surface`](./surface.md)
 - [`switch`](./switch.md)
+- [`tabs`](./tabs.md)
 - [`tags`](./tags.md)
 - [`text`](./text.md)
 - [`textarea`](./textarea.md)
@@ -50,10 +53,15 @@ docs, and devtools from one declaration, so these pages cannot drift (§24).
 - [`toast`](./toast.md)
 - [`toggle`](./toggle.md)
 - [`tooltip`](./tooltip.md)
+- [`window`](./window.md)
 
 ## Layout algorithms
 
 - `anchor`
+- `dock`
+- `flow`
+- `free`
+- `grid`
 - `split`
 - `stack`
 
@@ -65,6 +73,7 @@ docs, and devtools from one declaration, so these pages cannot drift (§24).
 - `focus-trap`
 - `focusable`
 - `positioned`
+- `resizable`
 - `tooltip-host`
 
 ## Diagnostics
