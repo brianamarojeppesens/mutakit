@@ -70,6 +70,20 @@ const prompt = hud.create("stack", { id: "prompt", at: "bottom", inset: { bottom
 prompt.create("key-prompt", { action: "Interact", keyboard: "E", gamepad: "A" });
 prompt.create("pane", { content: "Interact", class: "prompt-caption" });
 
+// And E actually interacts. `key-prompt` only draws the cap — advertising a
+// key without binding it is the example telling a small lie, and the first
+// thing anyone does with a prompt that says "Interact" is press it.
+//
+// A plain listener rather than the `shortcuts` service: that service ships in
+// the `app` preset, and this page imports `hud`, which deliberately carries
+// nothing S1 or S2 needs (§4.2). Reaching for it here would quietly undo the
+// preset split the file exists to demonstrate.
+window.addEventListener("keydown", (event) => {
+  if (event.key !== "e" && event.key !== "E") return;
+  if (event.repeat || event.metaKey || event.ctrlKey || event.altKey) return;
+  feed.push("Interacted with objective");
+});
+
 // A world marker that follows a moving object, projected in the PAINT phase.
 let angle = 0;
 hud.create("hud-marker", {
