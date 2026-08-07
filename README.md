@@ -24,11 +24,16 @@ and the library resolves layout, interaction, accessibility, and styling.
 No build step, no framework, no runtime dependencies. A draggable split and a
 centred modal in the same vocabulary.
 
-> **Status: 0.4.0 — M1 complete.** The kernel, geometry model, layout engine,
-> and the `anchor` and `stack` algorithms are implemented and tested. Splits
-> (M2), overlays (M3), forms (M4), and the HUD family (M5) are next; the
-> milestone list is [PLAN.md §26](PLAN.md#26-roadmap). `PLAN.md` is the design
-> source of truth; `source/` is the implementation source of truth.
+> **Status: 0.9.0 — M0 through M6 complete, M7 in progress.** All three driving
+> scenarios work: recursive splits with persistence (S1), the overlay and form
+> catalog (S2), and the HUD family at frame rate (S3). 50 element types, seven
+> layout algorithms, eight traits, five presets. 88 browser tests, 88 unit
+> tests, zero axe-core violations, and every performance budget met.
+>
+> **1.0 is gated on one item**: the size budget (§20.1) — the full preset is
+> 2.0× over and core 3.8×. Every build reports it; `--strict-budget` fails on
+> it. `PLAN.md` is the design source of truth; `source/` is the implementation
+> source of truth.
 
 ## The premise
 
@@ -104,6 +109,15 @@ npm run test:unit      # DOM-free: Len, rects, constraints, signals — node --t
 npm run serve          # then open http://localhost:8080/test/index.html
 npm test               # unit + lint + build + headless browser run
 ```
+
+Four pages, served from the same server:
+
+| Page | What it is |
+|---|---|
+| `test/index.html` | the suite — element construction, layout snapshots, interaction, leaks |
+| `test/a11y.html` | every element type in several states, under axe-core (§23.6) |
+| `test/bench/` | six scenarios with pass/fail thresholds (§20.3) |
+| `test/proto/` | prototypes answering one design question each |
 
 The browser harness **must be served** — ES modules are fetched, so `file://`
 is CORS-blocked. `npm run serve` is the shortest path; the harness loads

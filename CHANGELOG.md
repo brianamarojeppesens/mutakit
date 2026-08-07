@@ -4,6 +4,42 @@ All notable changes to Mutakit are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased] — M7: toward 1.0
+
+The accessibility audit, the benchmark suite, the performance record, and the
+migration guide (PLAN.md §26 M7). **1.0 is gated on one remaining item**: the
+size budget (§20.1), which is 2.0× over for the full preset and 3.8× for core.
+
+### Added
+
+- **`test/a11y.html`** (§23.6) — every one of the 50 element types rendered in
+  several states and audited by a vendored axe-core. **Zero violations**, and
+  the page fails the run if that changes.
+- **`test/bench/`** (§20.3) — six scenarios with the thresholds §20.1 states,
+  each reporting a number and a verdict. All six are within budget; the results
+  are recorded in `docs/perf-history.md`.
+- **`docs/migration.md`** — the 0.x path, and what §25.1 freezes at 1.0.
+- The architectural lint now **imports every module**, because a backtick
+  inside a comment inside a tagged template ends the template and the rest of
+  the file is parsed as code. That shipped twice.
+
+### Fixed — all four found by the accessibility audit, none by review
+
+- **A destructive button measured 3.76:1** against WCAG AA's 4.5:1 for normal
+  text. `--mk-color-danger` moves from `red-500` to `red-600`, which measures
+  4.53:1. The last place to be hard to read is a button that deletes something.
+- **A standalone `resizer` carried no `aria-valuenow`**, which
+  `role="separator"` requires. A split filled it in from its track model on the
+  next arrange; one composed by hand never did.
+- **A `combobox` outside a `field` had no accessible name.** A placeholder is
+  not a name.
+- **Closable tabs put a button inside a button.** There is no arrangement of a
+  *control* that satisfies both "a tablist contains only tabs" and "no nested
+  interactive content", so the × is now a pointer affordance, `Delete` is the
+  accessible path, and `aria-keyshortcuts` announces it.
+- A `tabs` `aria-controls` pointed at a panel that did not exist yet. A
+  dangling relationship is worse than none.
+
 ## [0.9.0] — M6: ecosystem and polish
 
 The devtools plugin, the DSL and custom-element plugins, the `dock`, `grid`,

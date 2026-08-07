@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mutakit — accessibility audit</title>
+<link rel="stylesheet" href="harness.css">
+</head>
+<body>
+<header class="harness-header">
+  <h1>Mutakit — accessibility</h1>
+  <p class="tagline">Every element type, in several states, under axe-core.</p>
+  <p class="source-note">
+    Violations fail the run. This plus the manual screen-reader checklist is the
+    accessibility gate (PLAN.md §23.6, §14).
+  </p>
+</header>
+<main>
+  <section class="panel"><h2>Rendered</h2><div id="scratch"></div></section>
+  <section class="panel">
+    <h2>Results <span id="summary" class="summary"></span></h2>
+    <ol id="results" class="results"></ol>
+  </section>
+</main>
+<script src="vendor/axe.min.js"></script>
+<script type="module" src="a11y.js"></script>
+</body>
+</html>

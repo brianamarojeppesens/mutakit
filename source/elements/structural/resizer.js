@@ -79,6 +79,13 @@ export const resizer = {
   create(ctx) {
     const el = ctx.dom("div", { class: `mk-resizer mk-resizer--${ctx.props.axis}` });
     ctx.state.drag = null;
+    // `role="separator"` with a `tabindex` *requires* aria-valuenow. A split
+    // fills these in from its track model on the next arrange, but a resizer
+    // composed by hand may never have one — and a required ARIA attribute that
+    // arrives late is a required ARIA attribute that is sometimes missing.
+    el.setAttribute("aria-valuenow", "0");
+    el.setAttribute("aria-valuemin", "0");
+    el.setAttribute("aria-valuemax", "0");
     return el;
   },
 

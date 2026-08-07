@@ -55,6 +55,7 @@ export const TOKENS_CSS = css`
     --mk-blue-500: #3b82f6;
     --mk-blue-600: #2563eb;
     --mk-red-500: #ef4444;
+    --mk-red-600: #dc2626;
     --mk-amber-500: #f59e0b;
     --mk-green-500: #22c55e;
 
@@ -85,7 +86,12 @@ export const TOKENS_CSS = css`
     --mk-color-surface-raised: #ffffff;
     --mk-color-surface-sunken: var(--mk-gray-100);
     --mk-color-accent: var(--mk-blue-600);
-    --mk-color-danger: var(--mk-red-500);
+    /*
+     * red-600, not red-500. White on #ef4444 measures 3.76:1, below WCAG AA's
+     * 4.5:1 for normal text, and a destructive button is the last place to be
+     * hard to read. Measured by axe-core, not chosen by eye.
+     */
+    --mk-color-danger: var(--mk-red-600);
     --mk-color-warning: var(--mk-amber-500);
     --mk-color-success: var(--mk-green-500);
     --mk-color-muted: var(--mk-gray-300);

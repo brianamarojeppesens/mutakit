@@ -20,7 +20,7 @@
  */
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SOURCE = path.join(ROOT, "source");
@@ -171,7 +171,23 @@ for (const code of [...catalogued].sort()) {
   }
 }
 
-// ── 5. no cycles ───────────────────────────────────────────────────────
+// ── 5. every module parses ─────────────────────────────────────────────
+// Cheap, and it catches the one mistake this codebase keeps making: a backtick
+// inside a comment *inside* a tagged template literal ends the template, and
+// the rest of the file is then parsed as code. Twice now.
+for (const file of files) {
+  try {
+    await import(pathToFileURL(file).href);
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      problems.push(`${path.relative(ROOT, file)}: does not parse — ${error.message}`);
+    }
+    // A module that throws at import time for any other reason is a runtime
+    // concern, not this check's business.
+  }
+}
+
+// ── 6. no cycles ───────────────────────────────────────────────────────
 const state = new Map();
 function visit(file, trail) {
   if (state.get(file) === "done") return;

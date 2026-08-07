@@ -10,6 +10,7 @@
 |---|---|---|---|---|
 | `disabled` | `boolean` | `false` | — |  |
 | `invalid` | `boolean` | `false` | — |  |
+| `label` | `string` | `` | — |  |
 | `max` | `number` | — | — |  |
 | `placeholder` | `string` | `` | — |  |
 | `value` | `string[]` | `undefined` | persisted |  |

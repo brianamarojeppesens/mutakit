@@ -128,20 +128,30 @@ function renderTabs(ctx) {
       class: "mk-tabs__tab",
       id: `${id}-tab`,
       "aria-selected": String(selected),
-      "aria-controls": `${id}-panel`,
+      // Set only once the panel exists — see syncPanels. A dangling
+      // `aria-controls` is worse than none: it promises a relationship the
+      // assistive technology then cannot follow.
+      "aria-controls": null,
       // Roving tabindex: a tablist is one tab stop, and arrows move within it.
       tabindex: selected ? "0" : "-1",
+      // The keyboard path to closing, announced rather than left to be
+      // discovered. It is the *real* path: the × below is a pointer
+      // affordance, deliberately not a control.
+      "aria-keyshortcuts": ctx.props.closable ? "Delete" : null,
       text: labelOf(item)
     }, list);
     ctx.state.tabs.push({ tab, id });
     ctx.own(dom.listen(tab, "click", () => ctx.node.definition.commands.select(ctx, id)));
 
     if (ctx.props.closable) {
+      // Not a button, and not focusable. A `role="tablist"` may contain only
+      // tabs, and a button inside a button is nested interactive content —
+      // there is no arrangement of a *control* here that satisfies both. So
+      // this is a pointer affordance and `Delete` is the accessible path,
+      // which is what `aria-keyshortcuts` above announces.
       const close = dom.el("span", {
         class: "mk-tabs__close",
-        role: "button",
-        tabindex: "-1",
-        "aria-label": `Close ${labelOf(item)}`,
+        "aria-hidden": "true",
         text: "×"
       }, tab);
       ctx.own(
@@ -166,6 +176,8 @@ function syncPanels(ctx) {
     child.el.setAttribute("role", "tabpanel");
     child.el.id = `${child.id}-panel`;
     child.el.setAttribute("aria-labelledby", `${child.id}-tab`);
+    const tab = ctx.state.list.querySelector(`#${CSS.escape(child.id)}-tab`);
+    if (tab) tab.setAttribute("aria-controls", `${child.id}-panel`);
     child.el.hidden = !selected;
     // A hidden panel is out of the tab order entirely, not merely invisible:
     // `hidden` alone still leaves focusable descendants reachable in engines

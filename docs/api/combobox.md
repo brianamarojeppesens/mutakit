@@ -12,6 +12,7 @@
 | `disabled` | `boolean` | `false` | — |  |
 | `filter` | `function` | — | — |  |
 | `invalid` | `boolean` | `false` | — |  |
+| `label` | `string` | `` | — |  |
 | `name` | `string` | `` | — |  |
 | `options` | `array` | `undefined` | — |  |
 | `placeholder` | `string` | `` | — |  |

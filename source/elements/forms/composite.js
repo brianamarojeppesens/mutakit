@@ -103,6 +103,7 @@ export const combobox = {
   props: {
     value: { type: "string", default: "", persist: true },
     name: { type: "string", default: "" },
+    label: { type: "string", default: "" },
     options: { type: "array", default: () => [] },
     placeholder: { type: "string", default: "" },
     disabled: { type: "boolean", default: false },
@@ -137,7 +138,11 @@ export const combobox = {
       "aria-controls": `${id}-list`,
       "aria-autocomplete": "list",
       autocomplete: "off",
-      placeholder: ctx.props.placeholder
+      placeholder: ctx.props.placeholder,
+      // A placeholder is not a name. Inside a `field` the label element does
+      // the labelling and this is redundant but harmless; standing alone it is
+      // the only thing between the control and having no accessible name.
+      "aria-label": ctx.props.label || null
     }, el);
     const list = dom.el("ul", { class: "mk-combobox__list", id: `${id}-list`, role: "listbox", hidden: "" }, el);
 
@@ -363,6 +368,7 @@ export const tags = {
   version: "1.0.0",
   props: {
     value: { type: "array", of: "string", default: () => [], persist: true },
+    label: { type: "string", default: "" },
     placeholder: { type: "string", default: "" },
     max: { type: "number" },
     disabled: { type: "boolean", default: false },
@@ -397,7 +403,10 @@ export const tags = {
     const input = dom.el("input", {
       type: "text",
       class: "mk-control mk-control--tags",
-      placeholder: ctx.props.placeholder
+      placeholder: ctx.props.placeholder,
+      // The group carries the field's name; the input inside it needs its own,
+      // because that is the thing a screen reader lands on when typing.
+      "aria-label": ctx.props.label ? `Add to ${ctx.props.label}` : "Add a tag"
     }, el);
     Object.assign(ctx.state, { list, input });
 

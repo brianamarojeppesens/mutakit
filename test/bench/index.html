@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mutakit — benchmarks</title>
+<link rel="stylesheet" href="../harness.css">
+</head>
+<body>
+<header class="harness-header">
+  <h1>Mutakit — benchmarks</h1>
+  <p class="tagline">Scripted scenarios with pass/fail thresholds (PLAN.md §20.3).</p>
+  <p class="source-note">A regression over 10% blocks a release. Results go in
+    <code>docs/perf-history.md</code>.</p>
+</header>
+<main>
+  <section class="panel"><h2>Stage</h2><div id="scratch"></div></section>
+  <section class="panel">
+    <h2>Results <span id="summary" class="summary"></span></h2>
+    <ol id="results" class="results"></ol>
+  </section>
+</main>
+<script type="module" src="bench.js"></script>
+</body>
+</html>
