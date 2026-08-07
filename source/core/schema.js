@@ -165,8 +165,17 @@ export function normalizeSchema(schema) {
  */
 export function validateValue(desc, value, path) {
   const d = desc.name ? desc : normalizeDescriptor(desc, path || "value");
+  // An empty string and an empty array are absent for validation purposes.
+  // A form asking for a required field means "the user must supply something",
+  // and `""` is what an untouched text input supplies.
+  const empty =
+    value === undefined ||
+    value === null ||
+    value === "" ||
+    (Array.isArray(value) && value.length === 0);
+  if (d.required && empty) return bad(`${path || d.name} is required`);
+
   if (value === undefined || value === null) {
-    if (d.required) return bad(`${path || d.name} is required`);
     if (value === undefined && d.default !== undefined) {
       return ok(typeof d.default === "function" && d.type !== "function" ? d.default() : d.default);
     }

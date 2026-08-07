@@ -1,0 +1,49 @@
+# `slider`
+
+> Generated from the prop schema. Edit `source/`, not this file.
+
+**Version** 1.0.0 · **Origin** core
+
+## Props
+
+| Name | Type | Default | Constraints | Notes |
+|---|---|---|---|---|
+| `describedBy` | `string` | `` | — |  |
+| `disabled` | `boolean` | `false` | — |  |
+| `invalid` | `boolean` | `false` | — |  |
+| `label` | `string` | `` | — |  |
+| `max` | `number` | `100` | — |  |
+| `min` | `number` | `0` | — |  |
+| `name` | `string` | `` | — |  |
+| `placeholder` | `string` | `` | — |  |
+| `readonly` | `boolean` | `false` | — |  |
+| `required` | `boolean` | `false` | — |  |
+| `step` | `number` | `1` | — |  |
+| `value` | `number` | `0` | persisted |  |
+
+
+## Events
+
+- `input`
+- `change`
+- `focus`
+- `blur`
+
+## Commands
+
+- `focus()`
+- `read()`
+- `clear()`
+
+## Traits
+
+- `focusable`
+
+## Accessibility
+
+_Not declared._
+
+## Layout
+
+Children are governed by the `anchor` algorithm (§7).
+

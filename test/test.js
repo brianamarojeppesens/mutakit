@@ -975,6 +975,278 @@ describe("overlays (§11.2, §16)", () => {
 });
 
 
+describe("forms (§11.3)", () => {
+  test("controls wrap native elements, which is the whole accessibility story", (t) => {
+    const { mk, app } = fixture(t);
+    const cases = [
+      ["text", "input", "text"],
+      ["password", "input", "password"],
+      ["number", "input", "number"],
+      ["checkbox", "input", "checkbox"],
+      ["switch", "input", "checkbox"],
+      ["slider", "input", "range"],
+      ["date", "input", "date"],
+      ["file", "input", "file"],
+      ["textarea", "textarea", null],
+      ["select", "select", null]
+    ];
+    for (const [type, tag, inputType] of cases) {
+      const control = app.create(type, { name: type });
+      mk.tick();
+      const native = control.el.querySelector(tag);
+      t.ok(native, `${type} wraps a native <${tag}>`);
+      if (inputType) t.equal(native.type, inputType);
+      t.equal(native.name, type, "and carries its name, so autofill works");
+    }
+    t.equal(app.node.children[4].el.querySelector("input").getAttribute("role"), "switch",
+      "a switch is a checkbox with one attribute changed");
+  });
+
+  test("a field wires label, description, and error to its control automatically", (t) => {
+    const { mk, app } = fixture(t);
+    const field = app.create("field", {
+      id: "port-field",
+      label: "Port",
+      description: "1–65535",
+      required: true
+    });
+    const input = field.create("number", { name: "port", value: 8080 });
+    mk.tick();
+
+    const native = input.el.querySelector("input");
+    t.equal(field.el.querySelector("label").getAttribute("for"), native.id);
+    t.equal(native.getAttribute("aria-describedby"), "port-field-desc");
+    t.equal(native.getAttribute("aria-required"), "true");
+    t.equal(native.value, "8080");
+
+    field.set({ error: "Already in use" });
+    mk.tick();
+    t.equal(native.getAttribute("aria-invalid"), "true");
+    t.ok(native.getAttribute("aria-describedby").includes("port-field-error"));
+    t.equal(field.el.querySelector(".mk-field__error").textContent, "Already in use");
+    t.equal(field.el.querySelector(".mk-field__error").getAttribute("role"), "alert");
+  });
+
+  test("validation runs on submit, then on change for fields that already errored", async (t) => {
+    const { mk, app } = fixture(t);
+    const form = app.create("form", {
+      id: "settings",
+      values: { email: "", port: 8080 },
+      schema: {
+        email: { type: "string", required: true, format: "email" },
+        port: { type: "number", min: 1, max: 65535, integer: true }
+      }
+    });
+    const emailField = form.create("field", { id: "email-field", label: "Email" });
+    const email = emailField.create("text", { name: "email" });
+    const portField = form.create("field", { id: "port-field", label: "Port" });
+    portField.create("number", { name: "port", value: 8080 });
+    mk.tick();
+
+    const submitted = [];
+    form.on("submit", (event) => submitted.push(event.detail.values));
+    form.on("invalid", (event) => submitted.push({ invalid: Object.keys(event.detail.errors) }));
+
+    const ok = await form.submit();
+    mk.tick();
+    t.equal(ok, false, "an empty required field fails");
+    t.deepEqual(submitted, [{ invalid: ["email"] }]);
+    t.equal(emailField.get("error").length > 0, true, "the message lands on the field");
+    t.equal(document.activeElement.closest(".mk-field"), emailField.el,
+      "and focus moves to the first invalid control (§11.3)");
+
+    // Revalidation on change, but only for what has already errored.
+    const native = email.el.querySelector("input");
+    native.value = "not-an-email";
+    native.dispatchEvent(new Event("input", { bubbles: true }));
+    await Promise.resolve();
+    mk.tick();
+    t.ok(emailField.get("error"), "still invalid, and it says so as you type now");
+
+    native.value = "a@b.co";
+    native.dispatchEvent(new Event("input", { bubbles: true }));
+    await Promise.resolve();
+    await Promise.resolve();
+    mk.tick();
+    t.equal(emailField.get("error"), "", "and clears the moment it is fixed");
+
+    const done = await form.submit();
+    t.equal(done, true);
+  });
+
+  test("an async validator's out-of-order response cannot win", async (t) => {
+    const { mk, app } = fixture(t);
+    let resolveSlow;
+    const form = app.create("form", {
+      id: "async-form",
+      values: { name: "a" },
+      schema: { name: { type: "string" } },
+      validate: {
+        name: (value) =>
+          value === "a"
+            ? new Promise((resolve) => { resolveSlow = () => resolve("stale verdict"); })
+            : null
+      }
+    });
+    mk.tick();
+
+    const slow = form.validateField("name");
+    form.node.state.values.name = "b";
+    await form.validateField("name");
+    resolveSlow();
+    await slow;
+    t.deepEqual(form.state().errors, {}, "the newer run's verdict stands");
+  });
+
+  test("cross-field validators see every value", async (t) => {
+    const { mk, app } = fixture(t);
+    const form = app.create("form", {
+      id: "pw",
+      values: { password: "secret", confirm: "typo" },
+      schema: {},
+      validate: {
+        $form: (values) =>
+          values.password === values.confirm ? null : { confirm: "Passwords do not match" }
+      }
+    });
+    mk.tick();
+    const ok = await form.submit();
+    t.equal(ok, false);
+    t.equal(form.state().errors.confirm, "Passwords do not match");
+  });
+
+  test("dirty tracking and reset", (t) => {
+    const { mk, app } = fixture(t);
+    const form = app.create("form", { id: "dirty", values: { a: 1 }, schema: {} });
+    mk.tick();
+    t.equal(form.state().dirty, false);
+    form.node.state.values.a = 2;
+    t.equal(form.state().dirty, true);
+    form.reset();
+    t.equal(form.state().dirty, false);
+  });
+
+  test("a combobox implements the ARIA pattern, keyboard included", (t) => {
+    const { mk, app } = fixture(t);
+    const combo = app.create("combobox", {
+      id: "cb",
+      options: ["Alpha", "Beta", "Gamma"],
+      placeholder: "Search"
+    });
+    mk.tick();
+    const input = combo.el.querySelector("input");
+    t.equal(input.getAttribute("role"), "combobox");
+    t.equal(input.getAttribute("aria-expanded"), "false");
+    t.equal(input.getAttribute("aria-autocomplete"), "list");
+
+    key(input, "ArrowDown");
+    t.equal(input.getAttribute("aria-expanded"), "true");
+    t.equal(combo.el.querySelectorAll('[role="option"]').length, 3);
+    t.ok(input.getAttribute("aria-activedescendant"), "focus stays in the input");
+
+    key(input, "ArrowDown");
+    key(input, "Enter");
+    t.equal(combo.get("value"), "Beta");
+    t.equal(input.getAttribute("aria-expanded"), "false");
+
+    input.value = "gam";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    t.equal(combo.el.querySelectorAll('[role="option"]').length, 1, "and it filters");
+  });
+
+  test("a radio group carries the group semantics its radios cannot", (t) => {
+    const { mk, app } = fixture(t);
+    const group = app.create("radio-group", {
+      id: "density",
+      label: "Density",
+      options: [{ value: "compact", label: "Compact" }, { value: "cosy", label: "Cosy" }],
+      value: "cosy"
+    });
+    mk.tick();
+    t.equal(group.el.getAttribute("role"), "radiogroup");
+    t.equal(group.el.getAttribute("aria-label"), "Density");
+    const radios = group.el.querySelectorAll('input[type="radio"]');
+    t.equal(radios[1].checked, true);
+    t.equal(radios[0].name, radios[1].name, "one name, so the browser gives exclusivity");
+  });
+
+  test("tags: Enter adds, Backspace on an empty input removes the last", (t) => {
+    const { mk, app } = fixture(t);
+    const tags = app.create("tags", { id: "labels", value: ["one"] });
+    mk.tick();
+    const input = tags.el.querySelector("input");
+
+    input.value = "two";
+    key(input, "Enter");
+    mk.tick();
+    t.deepEqual(tags.get("value"), ["one", "two"]);
+    t.equal(tags.el.querySelectorAll(".mk-tags__tag").length, 2);
+
+    input.value = "";
+    key(input, "Backspace");
+    mk.tick();
+    t.deepEqual(tags.get("value"), ["one"], "the only keyboard path to removal");
+  });
+
+  test("a segmented control is a radio group with roving focus", (t) => {
+    const { mk, app } = fixture(t);
+    const seg = app.create("segmented", {
+      id: "align",
+      label: "Align",
+      options: ["left", "center", "right"],
+      value: "left"
+    });
+    mk.tick();
+    const buttons = seg.el.querySelectorAll('[role="radio"]');
+    t.equal(buttons[0].getAttribute("tabindex"), "0");
+    t.equal(buttons[1].getAttribute("tabindex"), "-1");
+    key(seg.el, "ArrowRight");
+    mk.tick();
+    t.equal(seg.get("value"), "center");
+    t.equal(buttons[1].getAttribute("aria-checked"), "true");
+  });
+
+  test("shortcuts resolve most-specific-scope-first, and chords work", (t) => {
+    const { mk, app } = fixture(t);
+    const shortcuts = mk.service("shortcuts");
+    const fired = [];
+
+    const pane = app.create("pane", { id: "scoped", size: { w: 100, h: 100 } });
+    mk.tick();
+    t.cleanup(shortcuts.bind("Mod+K", () => fired.push("global"), { scope: "global" }));
+    t.cleanup(
+      shortcuts.bind("Mod+K", () => fired.push("subtree"), { scope: "subtree", node: pane.node })
+    );
+    t.cleanup(shortcuts.bind("Ctrl+G Ctrl+S", () => fired.push("chord"), { scope: "global" }));
+
+    key(document.documentElement, "k", { ctrlKey: true });
+    t.deepEqual(fired, ["global"]);
+
+    key(pane.el, "k", { ctrlKey: true });
+    t.deepEqual(fired, ["global", "subtree"], "the more specific live scope wins");
+
+    key(document.documentElement, "g", { ctrlKey: true });
+    t.equal(fired.length, 2, "the first stroke of a chord fires nothing");
+    key(document.documentElement, "s", { ctrlKey: true });
+    t.ok(fired.includes("chord"), "the second completes it");
+
+    const sheet = shortcuts.cheatSheet();
+    t.ok(sheet.global.length >= 2, "the cheat sheet is generated, not written");
+  });
+
+  test("a duplicate binding is reported at registration, not at press time", (t) => {
+    const { mk } = fixture(t);
+    const records = [];
+    Mutakit.diagnostics.sink((record) => records.push(record));
+    t.cleanup(() => Mutakit.diagnostics.sink(null));
+    const shortcuts = mk.service("shortcuts");
+    t.cleanup(shortcuts.bind("Mod+P", () => {}, { description: "Print" }));
+    t.cleanup(shortcuts.bind("Mod+P", () => {}, { description: "Palette" }));
+    t.ok(records.some((r) => r.code === "MK6004"));
+  });
+});
+
+
 function rect(handle) {
   const r = handle.node.computed;
   return [round(r.x), round(r.y), round(r.w), round(r.h)];

@@ -7,7 +7,7 @@
  */
 
 /** The library version. Kept here so every module can cite it without a cycle. */
-export const VERSION = "0.6.0";
+export const VERSION = "0.7.0";
 
 /** The serialization schema version (§19.2). */
 export const SCHEMA_VERSION = 1;

@@ -1,6 +1,6 @@
 {
   "name": "mutakit",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "A dependency-free browser library that builds and mutates graphical user interfaces from declarative geometry.",
   "type": "module",
   "license": "MIT",

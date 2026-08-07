@@ -4,6 +4,48 @@ All notable changes to Mutakit are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/).
 
+## [0.7.0] — M4: forms (S2 complete)
+
+`field` composition, the control set, the validation subsystem, the `form`
+element, and the shortcut registry (PLAN.md §26 M4).
+
+### Added
+
+- **The control set** (§11.3), every one wrapping a native element where one
+  exists — which is what buys IME support, autofill, password managers, and
+  mobile keyboards. The definitions are generated from one description, so no
+  control can drift from the others in its validation wiring or its ARIA.
+  `combobox` and `tags` are custom because the platform has no equivalent
+  worth wrapping, and each case is named.
+- **`field`** — label, description, error, and the accessibility wiring that
+  goes with them, applied automatically. Doing this by hand per form is the
+  most commonly skipped accessibility task in web applications.
+- **Validation as a subsystem** (§11.3): validate on submit, then revalidate on
+  change for fields that have already errored; async validators debounced to
+  blur with out-of-order responses discarded by sequence number; cross-field
+  validators that see every value; and, on a failed submit, focus to the first
+  invalid control while a summary goes out through the assertive live region.
+  It reuses §8.1's prop schemas verbatim — one validator vocabulary.
+- **The shortcut registry** (§13.4) with scopes, chords, `Mod` normalization,
+  conflict detection at registration, and a generated cheat sheet.
+
+### Fixed
+
+- **The full preset shipped no overlays and no forms.** `package.json` declares
+  `"sideEffects": false` — true, and relied on by consumers' bundlers — under
+  which a bundler may drop `import "./app.js"` outright. It did, silently:
+  `mutakit.js` came out byte-identical to `mutakit.dock.js`. Presets are now
+  imported by binding, which is what makes the import load-bearing.
+- `required` accepted an empty string, so a required text field passed
+  validation untouched. It now treats `""` and `[]` as absent, which is what a
+  form means by the word.
+- A `field` wired its label to a control that did not exist yet: controls are
+  children, so they are created after the field that labels them.
+- The conformance check warned about any trait without `detach`, including the
+  four that own everything through `ctx.own`. It now warns only when neither is
+  present — the previous rule trained authors to add empty `detach` hooks,
+  which is worse than what it was checking for.
+
 ## [0.6.0] — M3: overlays (S2 half working)
 
 The layer service, backdrop management, the `focus-trap` and `dismissible`

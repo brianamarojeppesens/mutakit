@@ -320,6 +320,14 @@ keyboard equivalent (P5, §13.4). Enforced by the conformance check and the
 build lint.
 **Fix.** Declare `keys` on the trait or the element type.
 
+### MK6004 — Shortcut is already bound in this scope
+**Cause.** Two bindings claim the same chord in the same scope. Detected at
+registration, not at press time — a conflict discovered when the user presses
+the key is a conflict discovered by the user.
+**Fix.** Rebind one, or narrow its scope. Scopes run global → layer → element
+subtree → element, and the most specific live scope wins, so moving one binding
+into a subtree usually resolves the clash rather than papering over it.
+
 ### MK6003 — Live-region announcement was rate limited
 **Cause.** The same message was announced twice within two seconds. A live
 region that fires on every keystroke is worse than none, so the announcer
