@@ -701,6 +701,41 @@ describe("content interop (§8.8)", () => {
   });
 });
 
+describe("style backends (§10.15, D7)", () => {
+  test("a sink can collect CSS instead of injecting it", (t) => {
+    // D7 asked whether the *per-node* output could be swapped for atomic
+    // classes. It cannot: §12.4 publishes `--mk-x/y/w/h` as stable API, §8.8's
+    // adoption contract promises an adopted node gets those and nothing else,
+    // and P1 has CSS consume the engine's numbers through `width: var(--mk-w)`.
+    // What genuinely varies is *delivery*, and that is what this is.
+    const styles = Mutakit.collectStyles();
+    const host = t.sandbox();
+    host.style.cssText = "position:relative;width:400px;height:300px";
+
+    const before = document.adoptedStyleSheets.length + document.querySelectorAll("style").length;
+    const mk = Mutakit.create({ styles: styles.sink });
+    t.cleanup(() => mk.destroyInstance());
+    const app = mk.mount(host, { sizing: "fixed", size: { w: 400, h: 300 } });
+    app.create("surface", { id: "sink-a", at: "top-left", inset: 10, size: { w: 100, h: 50 } });
+    mk.tick();
+
+    const after = document.adoptedStyleSheets.length + document.querySelectorAll("style").length;
+    t.equal(after, before, "nothing was injected into the document");
+
+    const text = styles.text();
+    t.ok(/@layer mutakit\.reset, mutakit\.tokens/.test(text), "the layer order came first");
+    t.ok(/\.mk-node/.test(text), "the base CSS is there");
+    t.ok(/@layer mutakit\.element[^]*\.mk-surface/.test(text), "and element CSS, in its layer");
+    t.deepEqual(styles.keys().slice(0, 4), ["layers", "reset", "tokens", "base"],
+      "in the order the cascade expects");
+
+    // Each key once, however many elements of a type exist.
+    app.create("surface", { id: "sink-b", size: { w: 10, h: 10 } });
+    mk.tick();
+    t.equal(styles.keys().filter((k) => k === "type:surface").length, 1);
+  });
+});
+
 describe("render targets (§10.14)", () => {
   test("a root in another document renders there, styles and all", (t) => {
     const { mk } = fixture(t);

@@ -86,4 +86,8 @@ if (body) body.create("pane", { id: "workspace" });
 const hud = Mutakit.layer("hud", { of: "viewport" });
 hud.create("pane", { id: "reticle", at: "center", size: { w: 24, h: 24 } });
 
-export { app, left, stage, bottom, shell, hud };
+// §10.15's sink, typed: collect the CSS rather than installing it.
+const collected = Mutakit.collectStyles();
+const headless = Mutakit.create({ styles: collected.sink });
+
+export { app, left, stage, bottom, shell, hud, headless, collected };

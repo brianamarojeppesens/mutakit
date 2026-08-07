@@ -1441,8 +1441,15 @@ If it's not on this list, it isn't extensible, and adding it requires a decision
 13. **Formatters / i18n** — number, date, and message formatting used by built-ins
 14. **Portals / render targets** — render into another document, an iframe, or a popup
     window (multi-window applications)
-15. **Style backends** — the default emits custom properties; alternatives could emit
-    constructable stylesheets, or atomic classes (⚑ D7)
+15. **Style sinks** — where stylesheets are delivered: a constructable sheet (the
+    default), a `<style>` with a nonce, another document (§10.14), or none at all —
+    `Mutakit.collectStyles()` accumulates the CSS text for server rendering, static
+    extraction, or a test. `Mutakit.create({ styles: sink })`, where a sink is
+    `(css, options) => dispose`.
+
+    What an element *emits per node* is not swappable, and D7 resolves that: the
+    §12.4 custom properties are published API, §8.8's adoption contract is written in
+    terms of them, and P1 depends on CSS being able to read them.
 
 Each extension point ships with: a schema, a conformance check, at least one built-in
 consumer, and at least one *non-built-in* example in `examples/`. The last requirement is
@@ -1633,9 +1640,16 @@ Shadow mode exposes a documented `::part()` surface and forwards tokens through 
 boundary — the trade-off is that only declared parts are styleable, which is stated
 plainly in the docs.
 
-Styles are injected once per instance via a constructable `CSSStyleSheet` where supported,
-falling back to a `<style>` element. Injection is lazy: an element type's styles are added
-the first time an instance of it is created.
+Styles are injected once per instance *per document* via a constructable `CSSStyleSheet`
+where supported, falling back to a `<style>` element. Injection is lazy: an element type's
+styles are added the first time an instance of it is created. A root mounted into another
+document (§10.14) receives everything already produced, not only what is defined after it
+arrives — and a constructable sheet belongs to the document that built it, so a foreign
+document takes the `<style>` path in its own document.
+
+Where they go is the one part of this that is swappable (§10.15): `create({ styles })`
+takes a sink, and `Mutakit.collectStyles()` is the built-in that keeps the text instead of
+installing it.
 
 ### 12.3 Design tokens
 
@@ -2946,7 +2960,7 @@ Decision records live in `docs/adr/`. Marked `⚑` in the text above.
 | **D4** | Shadow DOM: default or opt-in? | **Proposed: opt-in** (§12.2). Light DOM's stylability and form/focus behaviour outweigh encapsulation for the primary audience. Revisit if embedding complaints dominate. |
 | **D5** | Adopt Node tooling before 1.0? | **Resolved: yes** *(draft 7)*, when Node became available and dependencies were permitted. Decided on **capability**, not size: cross-engine headless testing (§23.3, which unblocks the R1 gate), `tsc`-verified types (§22.5), tree-shaking (§22.2), and source maps (§22.3). §20.4's finding held — the gzipped size delta was only ~1 KB, so size alone would never have justified it, and the plan was right to refuse to decide on that basis. The migration cost §22.2 was designed to keep cheap was in fact cheap: the `name`/`deps`/`factory` registry maps onto `import`/`export` mechanically, as predicted. **Scope of the yes:** build-time only. Runtime dependencies remain zero by default (§2.1). |
 | **D6** | Transformed (rotated/scaled) ancestors. | **Partially resolved** (§5.4): supported for hit-testing and dragging; layout math warns. Full support needs a matrix-aware ARRANGE — deferred past 1.0 unless a real use case appears. |
-| **D7** | Alternate style backends (atomic classes, constructable sheets). | **Open** (§10.15). The extension point is specified; no implementation planned before 1.0. |
+| **D7** | Alternate style backends (atomic classes, constructable sheets). | **Resolved: the per-node output is not swappable; the delivery is** *(draft 8)*. Three things depend on the custom properties specifically. §12.4 publishes `--mk-x/y/w/h` as documented, stable API. §8.8's adoption contract — itself versioned API under D11 — promises an adopted node receives those properties and nothing else. And P1 has CSS consume the engine's numbers through `width: var(--mk-w)`; emitting classes instead would move resolution back into JavaScript, which is the architecture inverted, and would churn a class per node per frame for the continuous values a drag produces. The question also conflated two things: constructable sheets are not an alternative backend, they are already the default delivery (§12.2). So §10.15 is **narrowed to delivery** — where CSS goes — which is genuinely variable and now implemented. |
 | **D8** | Should `signals` be core or a plugin? | **Resolved: core**, optional at every call site. The §20.5 accounting puts it at ~0.5 KB gzipped, cheap enough that the scheduler-integration argument (§15.1) wins uncontested. |
 | **D9** | Multi-window / portal rendering (§10.14). | **Open.** Specified as an extension point; no built-in before 1.0. |
 | **D10** | Does `table` stay in the built-in catalog, given the data-grid non-goal? | **Resolved: no** (§11.4). A plain semantic table is `flow` content plus author CSS; column resizing is `split` applied to a header row, which authors already have. Anything beyond that is the data-grid non-goal. Covered by a recipe instead. |

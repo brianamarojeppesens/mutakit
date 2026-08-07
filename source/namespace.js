@@ -16,6 +16,7 @@ import { setDiagnosticSink, resetDiagnostics, CATALOGUE } from "./core/diagnosti
 import { batch, computed, effect, signal, untrack } from "./core/signals.js";
 import { setClock, counters } from "./core/dom.js";
 import { MutakitInstance } from "./engine/instance.js";
+import { collectStyles } from "./engine/styles.js";
 import { parse, toCSS, toNumber } from "./geometry/len.js";
 import { clamp, containsPoint, intersect, rect } from "./geometry/rect.js";
 import { place, resolveAnchor } from "./geometry/anchor.js";
@@ -117,6 +118,9 @@ export const Mutakit = {
   serializer: (migration, options) => kernel().serializer(migration, options),
   /** A custom prop type for schemas — §10's eleventh extension point. */
   validator: (name, check, options) => kernel().validator(name, check, options),
+  /** Collect CSS instead of injecting it — §10.15's built-in sink. */
+  collectStyles,
+
   /** A number, date, or message formatter used by built-ins — §10.13. */
   formatter: (name, fn, options) => kernel().formatter(name, fn, options),
   /** A devtools panel — §10.12. */

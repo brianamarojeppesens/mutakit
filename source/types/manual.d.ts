@@ -441,6 +441,8 @@ export interface InstanceOptions {
   errorPolicy?: "isolate" | "propagate" | "silent";
   sanitize?: (markup: string) => string;
   nonce?: string;
+  /** Where stylesheets go — §10.15. Defaults to injecting into the document. */
+  styles?: (css: string, options: Record<string, unknown>) => (() => void) | void;
   sizing?: "element" | "viewport" | "fixed";
   direction?: "ltr" | "rtl";
   shadow?: boolean | "all";
@@ -517,6 +519,16 @@ export interface MutakitNamespace {
 
   create(options?: InstanceOptions): Instance;
   create(type: string, props?: CommonProps & Record<string, unknown>): Handle;
+
+  /**
+   * Collect CSS instead of injecting it — §10.15's built-in sink, for server
+   * rendering, static extraction, or a test.
+   */
+  collectStyles(): {
+    sink: (css: string, options: Record<string, unknown>) => () => void;
+    text(): string;
+    keys(): string[];
+  };
   mount(target: Element | string, options?: MountOptions): Handle;
   reset(): MutakitNamespace;
 

@@ -20,6 +20,24 @@ export class StyleManager {
     this.disposers = [];
     /** Every CSS this instance has produced, replayed into a new document. */
     this.written = [];
+
+    /**
+     * Where stylesheets go — §10.15's extension point, resolved narrowly.
+     *
+     * D7 asked whether the *per-node* output could be swapped for atomic
+     * classes. It cannot, and that is now decided rather than open: §12.4
+     * publishes `--mk-x/y/w/h` as stable API, §8.8's adoption contract
+     * promises an adopted node gets those properties and nothing else, and P1
+     * has CSS consume the engine's numbers through `width: var(--mk-w)`.
+     * Emitting classes instead would break all three and move resolution back
+     * into JavaScript, which is the architecture inverted.
+     *
+     * What genuinely varies is *delivery*: a constructable sheet, a `<style>`
+     * with a nonce, another document (§10.14), or no DOM at all — collecting
+     * CSS text for server rendering, static extraction, or a test. A sink is
+     * `(css, options) => dispose`.
+     */
+    this.sink = (mk.options && mk.options.styles) || dom.injectStyle;
   }
 
   /**
@@ -113,10 +131,17 @@ export class StyleManager {
    * defined after it arrives.
    */
   _inject(css, key, options) {
-    if (!dom.isBrowser()) return;
     if (!this.written.some((entry) => entry.key === key)) {
       this.written.push({ css, key, options: options || {} });
     }
+    // A sink that is not the DOM still wants the CSS — that is the whole point
+    // of §10.15 — so the browser check belongs to the default sink, not here.
+    if (this.sink !== dom.injectStyle) {
+      const remove = this.sink(css, { key, nonce: this.mk.options.nonce, ...(options || {}) });
+      if (typeof remove === "function") this.disposers.push(remove);
+      return;
+    }
+    if (!dom.isBrowser()) return;
     for (const document of this.documents()) this._write(css, key, options, document);
   }
 
@@ -125,7 +150,8 @@ export class StyleManager {
     if (!seen) this.injected.set(document, (seen = new Set()));
     if (seen.has(key)) return;
     seen.add(key);
-    const remove = dom.injectStyle(css, {
+    const remove = this.sink(css, {
+      key,
       nonce: this.mk.options.nonce,
       ...(options || {}),
       root: document
@@ -140,6 +166,41 @@ export class StyleManager {
     this.injected.clear();
     this.written.length = 0;
   }
+}
+
+/**
+ * A sink that keeps the CSS instead of injecting it — §10.15's built-in.
+ *
+ * The case §10.15 is actually for: rendering where there is no document, or
+ * where the stylesheet has to be emitted rather than installed. Server-side
+ * rendering and static extraction want the text; a test wants to assert on it
+ * without reading `document.adoptedStyleSheets`.
+ *
+ *     const styles = collectStyles();
+ *     const mk = Mutakit.create({ styles: styles.sink });
+ *     …
+ *     styles.text()   // every rule this instance produced, in order
+ */
+export function collectStyles() {
+  const chunks = [];
+  return {
+    sink(css, options) {
+      const key = (options && options.key) || `adhoc:${chunks.length}`;
+      if (chunks.some((chunk) => chunk.key === key)) return () => {};
+      chunks.push({ key, css });
+      return () => {
+        const index = chunks.findIndex((chunk) => chunk.key === key);
+        if (index !== -1) chunks.splice(index, 1);
+      };
+    },
+    /** Every rule produced, in the order the cascade layers expect. */
+    text() {
+      return chunks.map((chunk) => chunk.css).join("\n");
+    },
+    keys() {
+      return chunks.map((chunk) => chunk.key);
+    }
+  };
 }
 
 function wrap(layer, css) {
