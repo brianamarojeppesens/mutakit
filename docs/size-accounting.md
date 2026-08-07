@@ -151,10 +151,10 @@ on every build and `--strict-budget` fails on it until then.
 
 | Preset | Minified | Gzipped |
 |---|---:|---:|
-| `mutakit` | 237.20 KB | 72.66 KB |
+| `mutakit` | 237.22 KB | 72.68 KB |
 | `mutakit.core` | 92.26 KB | 30.86 KB |
 | `mutakit.dock` | 142.75 KB | 46.26 KB |
-| `mutakit.app` | 167.25 KB | 51.17 KB |
+| `mutakit.app` | 167.28 KB | 51.18 KB |
 | `mutakit.hud` | 106.22 KB | 35.22 KB |
 <!-- sizes:end -->
 

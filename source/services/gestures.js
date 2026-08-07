@@ -370,6 +370,20 @@ export class GestureService {
    * `ctx.own`, so a recognizer cannot outlive the element that wanted it.
    */
   attachTo(node, name, handlers) {
+    // A recognizer with no pointer stream is a state machine nobody feeds.
+    //
+    // `mount()` looks the pointer service up with `services.get()`, which does
+    // not create it — deliberately, so a late root can join one that already
+    // exists without every page paying for delegation it never uses. But
+    // nothing else asked for it either, so it was never created at all: no
+    // root was observed, no pointer event reached the queue, and every gesture
+    // in the library was inert. The recognizers were right, the arbitration
+    // was right, and none of it ever ran.
+    //
+    // Asking here is the honest place: this is the moment something actually
+    // wants pointers, and the service's own `attach` observes every root
+    // already mounted.
+    this.mk.service("pointer");
     const recognizer = this.mk.registry.get("gesture", name);
     if (!recognizer) {
       warn("MK3008", __MK_DEV__ &&

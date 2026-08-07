@@ -2743,6 +2743,65 @@ describe("motion (§17)", () => {
 
 
 describe("gestures and the pointer queue (§13.2, §13.3)", () => {
+  test("a real pointer stream reaches a recognizer (§13.2, §13.3)", async (t) => {
+    const { mk, app } = fixture(t);
+    const seen = [];
+    mk.define({
+      type: "acme:grabbable",
+      a11y: { role: "button" },
+      keys: { Enter: "activate" },
+      create: (ctx) => ctx.dom("div"),
+      mount(ctx) {
+        // Handlers are keyed by §13.3's phase names, not by `onEnd`-style
+        // aliases: possible, began, changed, ended, cancelled, failed.
+        ctx.gesture("tap", { ended: () => seen.push("tap") });
+        ctx.gesture("drag", {
+          began: () => seen.push("drag:began"),
+          changed: () => seen.push("drag:changed"),
+          ended: () => seen.push("drag:ended")
+        });
+      }
+    }, { replace: true });
+
+    const target = app.create("acme:grabbable", {
+      id: "gest-target", at: "top-left", inset: 0, size: { w: 400, h: 300 }
+    });
+    mk.tick();
+
+    // The recognizers have unit tests as pure reducers, and the arbitration
+    // has its own. Nothing exercised the path *into* them — which is where
+    // every gesture in the library was being lost: `mount()` looks the pointer
+    // service up without creating it, nothing else asked, so no root was ever
+    // observed and the queue stayed empty.
+    const box = target.el.getBoundingClientRect();
+    const send = (type, x, y, buttons) => target.el.dispatchEvent(new PointerEvent(type, {
+      bubbles: true, cancelable: true, pointerId: 1, pointerType: "mouse",
+      isPrimary: true, clientX: x, clientY: y, button: 0, buttons
+    }));
+
+    send("pointerdown", box.left + 20, box.top + 20, 1);
+    mk.tick();
+    send("pointerup", box.left + 20, box.top + 20, 0);
+    mk.tick();
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    mk.tick();
+    t.deepEqual(seen, ["tap"], "a press and release is a tap");
+
+    seen.length = 0;
+    send("pointerdown", box.left + 50, box.top + 50, 1);
+    mk.tick();
+    for (let i = 1; i <= 5; i++) {
+      send("pointermove", box.left + 50 + i * 15, box.top + 50, 1);
+      mk.tick();
+    }
+    send("pointerup", box.left + 125, box.top + 50, 0);
+    mk.tick();
+
+    t.equal(seen[0], "drag:began", "and a press with movement begins a drag");
+    t.equal(seen[seen.length - 1], "drag:ended");
+    t.ok(seen.filter((s) => s === "drag:changed").length >= 3, "reporting each move between");
+  });
+
   test("one delegated listener set per root, not one per element", (t) => {
     const { mk, app } = fixture(t);
     const before = { ...counters };
