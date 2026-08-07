@@ -3,7 +3,7 @@
  *
  * Kernel, geometry, engine, signals, the `anchor` and `stack` algorithms, the
  * layers service, the `focusable` trait, and the five Tier A element types.
- * Budget: ≤ 8.5 KB gzipped (§20.1).
+ * Budget: ≤ 33 KB gzipped (§20.1, revised on measurement in draft 8).
  *
  * A preset's imports *are* its definition. For anyone consuming the ESM build
  * through their own bundler these are a convenient starting import rather than

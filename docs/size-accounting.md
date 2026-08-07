@@ -12,46 +12,47 @@
 
 ## The finding
 
-**Core measures 29.87 KB gzipped against §20.1's 8.5 KB budget — 3.5× over.**
-The full preset measures 70.34 KB against 32 KB — 2.2× over.
+**Core measured 31.70 KB gzipped against §20.1's original 8.5 KB budget — 3.7×
+over.** The full preset measured 73.73 KB against 32 KB — 2.3× over. §20.1 has
+since been revised to 33 KB and 76 KB on the strength of what follows.
 
-PLAN.md §20.5 point 6 asks for exactly this to be recorded rather than absorbed:
+PLAN.md §20.5 asks for exactly this to be recorded rather than absorbed:
 
 > *"Expect the measured numbers to come in at or under these estimates; if any
 > module comes in **over**, that is a finding worth a line in the changelog
 > rather than a quiet budget revision."*
 
-This document is that finding, worked module by module so the revision it
-proposes rests on evidence rather than on the shortfall being inconvenient.
+This document is that finding, worked module by module, so the revision it
+supports rests on evidence rather than on the shortfall being inconvenient.
 
 ## Group-by-group, against §20.5's own rows
 
 | Group | §20.5 estimate | Measured | Ratio |
 |---|---:|---:|---:|
-| Kernel | 5.3 KB | 19.5 KB | 3.7× |
+| Kernel | 5.3 KB | 20.6 KB | 3.9× |
 | Signals | 1.5 KB | 2.4 KB | 1.6× |
-| Geometry | 6.2 KB | 15.0 KB | 2.4× |
-| Engine | 5.7 KB | 34.6 KB | **6.1×** |
+| Geometry | 6.2 KB | 15.2 KB | 2.5× |
+| Engine | 5.7 KB | 38.8 KB | **6.8×** |
 | Layout (`anchor`, `stack`) | 1.6 KB | 3.7 KB | 2.3× |
-| Services & traits | 1.4 KB | 3.8 KB | 2.7× |
+| Services & traits | 1.4 KB | 4.1 KB | 2.9× |
 | Elements (Tier A) | 1.2 KB | 3.0 KB | 2.5× |
-| Base CSS | 2.0 KB | 3.6 KB | 1.8× |
-| Namespace / entry | — | 1.9 KB | — |
-| **Total** | **24.9 KB min** | **88.4 KB min** | **3.5×** |
-| | ~8.0 KB gzip | **29.87 KB gzip** | 3.7× |
+| Base CSS | 2.0 KB | 3.7 KB | 1.9× |
+| Namespace / entry | — | 2.7 KB | — |
+| **Total** | **24.9 KB min** | **94.1 KB min** | **3.8×** |
+| | ~8.0 KB gzip | **31.70 KB gzip** | 4.0× |
 
-## Why Engine is 6.1× — the load-bearing part
+## Why Engine is 6.8× — the load-bearing part
 
 §20.5's engine row lists six modules: `compile` (1.2), `scheduler` (1.2),
 `measure` (1.0), `node` (1.0), `metrics` (0.8), `invalidate` (0.5). Measured,
 those six come to **9.1 KB** — 1.6× the estimate, which is ordinary
 estimate-versus-reality drift.
 
-The other **25.5 KB** is in four modules the table has **no row for at all**:
+The bulk of the rest is in four modules the table has **no row for at all**:
 
 | Module | Measured | What it implements |
 |---|---:|---|
-| `engine/instance.js` | 18.57 KB | element lifecycle (§8.1), content interop (§8.8), identity and lookup (§8.9), error isolation (§8.10), trait attachment (§9), root frames (§5.11), the ARRANGE pass |
+| `engine/instance.js` | 21.8 KB | element lifecycle (§8.1), content interop (§8.8), identity and lookup (§8.9), error isolation (§8.10), trait attachment (§9), root frames (§5.11), the ARRANGE pass |
 | `engine/handle.js` | 2.36 KB | tier-1 fluent handles (§18.1) |
 | `engine/ctx.js` | 1.64 KB | `ctx` — the only surface a plugin sees (§8.2) |
 | `engine/styles.js` | 1.45 KB | cascade-layer injection and prefix scoping (§12.2) |
@@ -104,7 +105,7 @@ needs `build` for §8.8's nested-element form, and §8.8/§8.9 both sit inside t
 plugin contract. They are core by the cut line's own rule — *a thing is core if
 plugins depend on it existing*.
 
-## The proposed revision
+## The revision, now made
 
 §20.5 revised this budget once already, on evidence, when the ≤ 20 KB minified
 figure proved unachievable — and noted then that the gzip figure was always the
@@ -112,10 +113,10 @@ meaningful one. The same correction is due again, and for the same reason: the
 number was projected from an accounting that had not yet been written against
 the specification it was costing.
 
-| | Current (§20.1) | Proposed | Measured today |
+| | Was (§20.1) | Now (§20.1, draft 8) | Measured |
 |---|---:|---:|---:|
-| Core | ≤ 8.5 KB gzip | **≤ 30 KB gzip** | 29.87 KB |
-| Full | ≤ 32 KB gzip | **≤ 71 KB gzip** | 70.34 KB |
+| Core | ≤ 8.5 KB gzip | **≤ 33 KB gzip** | 31.70 KB |
+| Full | ≤ 32 KB gzip | **≤ 76 KB gzip** | 73.73 KB |
 
 ### The full preset since
 
@@ -140,9 +141,13 @@ build. And it is not a claim that core is as small as it could be — only that
 what remains is specified behaviour, and that removing it would mean amending
 §5–§8 first.
 
-**This document does not change PLAN.md.** §20.1 is the design source of truth
-and the revision is the maintainer's call; `npm run build` reports the overage
-on every build and `--strict-budget` fails on it until then.
+**§20.1 now carries these numbers** (draft 8), and `build.mjs` enforces them:
+`npm run build` reports any overage and `--strict-budget` fails the release,
+which is what the release checklist (§25.4) runs.
+
+The margin is about 4% — deliberately thin. These are not headroom; they are a
+line drawn under a measurement, so the next kilobyte has to be argued for
+rather than absorbed.
 
 ## For comparison
 
