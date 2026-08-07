@@ -1548,6 +1548,16 @@ describe("HUD and game (§11.5, S3)", () => {
     t.equal(abilities.node.children.length, 2, "both slots are built");
     t.ok(mk.byId("q") && mk.byId("w"), "each is addressable, so each is a real element");
     t.equal(abilities.node.children[0].parent, abilities.node, "and parented to the stack");
+
+    // Pinned to an edge with no size, so it sizes to its content — the row's
+    // width, not the widest child's. The algorithm's `display: flex` used to
+    // arrive in WRITE, one phase after the READ that measured it, so the first
+    // measurement saw a block container and read a column.
+    const boxes = [...abilities.el.children].map((el) => el.getBoundingClientRect());
+    t.close(abilities.node.computed.w, boxes[0].width + 8 + boxes[1].width, 1,
+      "the stack is as wide as the row it lays out");
+    t.close(boxes[0].top, boxes[1].top, 1, "and both children are on that row");
+    t.close(abilities.node.computed.h, boxes[0].height, 1, "one row tall, not two");
   });
 
   test("hud-* elements are presentational by default, and a meter is not", (t) => {

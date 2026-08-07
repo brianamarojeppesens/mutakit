@@ -225,6 +225,7 @@ export class MutakitInstance extends Kernel {
       // parent's intrinsic size. An auto-sized container measured empty
       // exactly once, and that measurement is the one that got written.
       if (node.algorithm) element.setAttribute("data-mk-algorithm", node.algorithm);
+      this._applyAlgorithmCSS(node);
       if (node.id) element.setAttribute("data-mk-id", node.id);
       if (options.class) element.classList.add(...String(options.class).split(/\s+/));
       if (options.style) dom.setStyles(element, options.style);
@@ -756,6 +757,29 @@ export class MutakitInstance extends Kernel {
     return makeContext(nodeOf(node));
   }
 
+  /**
+   * Put the algorithm's formatting context on the element straight away.
+   *
+   * ARRANGE stages this every frame and remains the authority — but staged
+   * writes flush in WRITE, and READ runs first. So on the frame a container is
+   * created it was still `display: block` when its own intrinsic size was
+   * measured: a row of children measured as a column, and the number that got
+   * written was the width of the widest child rather than the width of the
+   * row.
+   *
+   * Every algorithm's `css()` is a pure function of `algorithmOptions`, which
+   * the element's `create` hook has already set by the time this runs — none
+   * of them reads the frame or the layout context, which is what makes calling
+   * it this early sound rather than merely convenient.
+   */
+  _applyAlgorithmCSS(node) {
+    if (!node.el || !node.algorithm) return;
+    const algorithm = this.registry.get("layout", node.algorithm);
+    if (!algorithm || !algorithm.css) return;
+    const styles = this.guard(node, `layout:${algorithm.name}.css`, algorithm.css, [node, null]);
+    if (styles) dom.setStyles(node.el, styles);
+  }
+
   /** Set dirty bits on a node (§6.2). */
   invalidateNode(node, bits) {
     return invalidate(nodeOf(node), bits);
@@ -1049,6 +1073,11 @@ export class MutakitInstance extends Kernel {
     target.algorithmOptions = algorithm.schema
       ? validateAll(algorithm.schema, opts, { strict: false }).values
       : { ...opts };
+    // Same reason as at create: the children built below measure in the next
+    // READ, which comes before the WRITE that would otherwise establish the
+    // formatting context they are measured in.
+    if (target.el) target.el.setAttribute("data-mk-algorithm", name);
+    this._applyAlgorithmCSS(target);
 
     const created = [];
     const describedChildren = algorithm.childrenFrom ? algorithm.childrenFrom(opts) : null;

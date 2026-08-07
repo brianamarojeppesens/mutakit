@@ -151,11 +151,11 @@ on every build and `--strict-budget` fails on it until then.
 
 | Preset | Minified | Gzipped |
 |---|---:|---:|
-| `mutakit` | 235.17 KB | 71.93 KB |
-| `mutakit.core` | 91.03 KB | 30.46 KB |
-| `mutakit.dock` | 141.48 KB | 45.83 KB |
-| `mutakit.app` | 165.99 KB | 50.79 KB |
-| `mutakit.hud` | 104.32 KB | 34.56 KB |
+| `mutakit` | 235.33 KB | 71.99 KB |
+| `mutakit.core` | 91.29 KB | 30.52 KB |
+| `mutakit.dock` | 141.65 KB | 45.90 KB |
+| `mutakit.app` | 166.24 KB | 50.86 KB |
+| `mutakit.hud` | 104.58 KB | 34.63 KB |
 <!-- sizes:end -->
 
 `mutakit.core` is §4.2's core; `mutakit.hud` adds the HUD elements and gamepad;
