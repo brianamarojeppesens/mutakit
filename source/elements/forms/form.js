@@ -40,6 +40,16 @@ export const field = {
   slots: { control: { max: 1 }, default: {} },
   geometry: { defaults: { size: { w: "100%", h: "auto" } } },
 
+  /*
+   * Flow, for the same reason `modal` needs it: the control slot is filled into
+   * a wrapper this type builds, and under the inherited `anchor` that control
+   * was positioned against the field's own frame and taken out of flow. The
+   * wrapper then measured zero high, so a field declaring `h: "auto"` resolved
+   * to the height of its label alone and the next field's label was drawn over
+   * the previous field's input.
+   */
+  algorithm: "stack",
+
   /** A group, not a label: the label element does the labelling. */
   a11y: { role: "group", props: { "aria-labelledby": (ctx) => ctx.node.state.labelId || null } },
 

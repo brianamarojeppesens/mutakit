@@ -257,14 +257,30 @@ export class MutakitInstance extends Kernel {
     // hook that nominated an inner element keeps it.
     if (!node.contentEl) node.contentEl = element || parentNode.contentEl;
     if (element) {
-      element.classList.add(`${this.prefix}-node`, this.className(type));
+      element.classList.add(`${this.prefix}-node`, ...this.classNames(type));
       // Written now rather than staged for WRITE. The base stylesheet keys a
       // child's box ownership off this attribute (§9.1), and READ runs before
       // WRITE — so on the first frame every child of a flow-owning algorithm
       // was still absolutely positioned and contributed nothing to its
       // parent's intrinsic size. An auto-sized container measured empty
       // exactly once, and that measurement is the one that got written.
-      if (node.algorithm) element.setAttribute("data-mk-algorithm", node.algorithm);
+      if (node.algorithm) {
+        element.setAttribute("data-mk-algorithm", node.algorithm);
+        // And on the element that actually parents the children, when `create`
+        // nominated an inner one. The base stylesheet keys box ownership off
+        // `[data-mk-algorithm=…] > .mk-node`, and that combinator is deliberate
+        // — a descendant selector would reach into nested nodes and flow their
+        // children too. But `contentEl` puts slot content one level down, so a
+        // `dialog` (whose content element is its body) matched nothing: the
+        // form filling `body` stayed absolutely positioned against the whole
+        // dialog frame and was drawn over the header and through the footer.
+        //
+        // The algorithm governs where a node's children go, and they go into
+        // `contentEl`. That is the element the contract is about.
+        if (node.contentEl && node.contentEl !== element) {
+          node.contentEl.setAttribute("data-mk-algorithm", node.algorithm);
+        }
+      }
       this._applyAlgorithmCSS(node);
       if (node.id) element.setAttribute("data-mk-id", node.id);
       if (options.class) element.classList.add(...String(options.class).split(/\s+/));
@@ -916,7 +932,15 @@ export class MutakitInstance extends Kernel {
     const algorithm = this.registry.get("layout", node.algorithm);
     if (!algorithm || !algorithm.css) return;
     const styles = this.guard(node, `layout:${algorithm.name}.css`, algorithm.css, [node, null]);
-    if (styles) dom.setStyles(node.el, styles);
+    if (!styles) return;
+    dom.setStyles(node.el, styles);
+    // The content element is the container when `create` nominated one, so it
+    // needs the same container styles. It already carries `data-mk-algorithm`,
+    // and the algorithm's static stylesheet keys `display: flex` off that — but
+    // the *axis* is written here, inline. Setting one without the other left a
+    // dialog body as a flex container with the default `row` direction, so the
+    // description and the form sat side by side in half the width each.
+    if (node.contentEl && node.contentEl !== node.el) dom.setStyles(node.contentEl, styles);
   }
 
   /** Set dirty bits on a node (§6.2). */
@@ -1200,6 +1224,36 @@ export class MutakitInstance extends Kernel {
 
   className(type) {
     return `${this.prefix}-${type.replace(":", "-")}`;
+  }
+
+  /**
+   * The type's class and every class it extends, base last (§8.3).
+   *
+   * `extends` inherited props, commands, a11y, slots and the `create` chain —
+   * everything except the styles, because only the concrete type's class was
+   * ever applied. `dialog` extends `modal` extends `surface`, so it ran modal's
+   * `create`, got a `.mk-modal__header` and a `.mk-modal__body` inside it, and
+   * then matched none of the `.mk-modal` or `.mk-surface` rules that draw the
+   * panel: no background, no padding, no elevation. The whole overlay family
+   * rendered as unstyled boxes on the scrim, and a plain `modal` looked fine,
+   * which is what made it hard to see.
+   *
+   * Derived last in *source* order is what decides the cascade — a base type is
+   * defined before the type extending it, so its rules are injected first and
+   * the derived type's win ties. The order of the class list itself is not what
+   * resolves that, and nothing here should depend on it.
+   */
+  classNames(type) {
+    const names = [];
+    const seen = new Set();
+    let current = type;
+    while (current && !seen.has(current)) {
+      seen.add(current);
+      names.push(this.className(current));
+      const definition = this.registry.get("type", current);
+      current = definition && definition.extends;
+    }
+    return names;
   }
 
   // ── Layout algorithms (§7) ─────────────────────────────────────────────

@@ -26,6 +26,18 @@ export const modal = {
   layer: "modal",
   traits: ["focus-trap", "dismissible"],
 
+  /*
+   * Flow, not the `anchor` inherited from `pane`.
+   *
+   * `create` builds a header, a body and a footer, and publishes the body as
+   * `contentEl` — the slots exist precisely so that filling `body` puts content
+   * between the other two. Under `anchor` a slot fill was positioned against
+   * the whole dialog frame instead, so a form in the body was drawn on top of
+   * the header and through the footer, at its intrinsic width. The slots
+   * promised a place to put things and the layout ignored it.
+   */
+  algorithm: "stack",
+
   props: {
     open: { type: "boolean", default: true, persist: true },
     title: { type: "string", default: "" },
