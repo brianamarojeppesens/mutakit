@@ -47,6 +47,23 @@ export function serve(port = PORT) {
       return;
     }
 
+    // `_site/` is a *snapshot*, taken whenever `npm run site` last ran. Serving
+    // it beside the real tree means two copies of every source file at two
+    // URLs, one of which silently stops being true the next time anything is
+    // edited — and it looks authoritative, because it is what gets published.
+    // An hour was spent on a bug report against code that had already been
+    // fixed, because the page under test was the snapshot.
+    if (url.pathname === "/_site" || url.pathname.startsWith("/_site/")) {
+      const real = url.pathname.replace(/^\/_site/, "") || "/";
+      response.writeHead(404, { "content-type": "text/plain; charset=utf-8" }).end(
+        `_site/ is a build snapshot and is not served here — it goes stale the ` +
+          `moment source changes.\n\nUse the real path instead:\n  ${real}\n\n` +
+          `To preview exactly what Pages will publish, run \`npm run site\` and ` +
+          `open _site/ with a separate static server.\n`
+      );
+      return;
+    }
+
     try {
       const info = await stat(filePath);
       if (info.isDirectory()) filePath = path.join(filePath, "index.html");
