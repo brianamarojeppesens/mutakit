@@ -32,6 +32,11 @@ export class Measurer {
     this.stub = fn;
   }
 
+  /** Which axes are intrinsic, or null when neither is. */
+  intrinsicAxes(node) {
+    return intrinsicAxes(node);
+  }
+
   /** Does this node need measuring at all? Strategy 1 lives here. */
   needsMeasure(node) {
     if (node.measureSync) return true;
@@ -127,10 +132,30 @@ export class Measurer {
     }
 
     // Batched: every forced read happens here, together (§6.5 strategy 3).
+    //
+    // Intrinsic axes are unpinned first, all of them, then read, then restored
+    // — three passes so the batch still costs one reflow rather than one per
+    // node. Reading an auto-sized element while the engine's own `--mk-w` is
+    // in effect is circular: the box reports back the number the engine last
+    // wrote, so a container that measured 0 once was pinned at 0 forever, and
+    // one that measured its parent's width stayed that wide no matter what it
+    // held.
+    const unpinned = [];
+    for (const node of forced) {
+      const axes = intrinsicAxes(node);
+      if (!axes) continue;
+      if (axes.w) node.el.style.width = "auto";
+      if (axes.h) node.el.style.height = "auto";
+      unpinned.push({ node, axes });
+    }
     for (const node of forced) {
       const box = dom.rectOf(node.el);
       node.measured = { w: box.w, h: box.h };
       clear(node, MEASURE);
+    }
+    for (const { node, axes } of unpinned) {
+      if (axes.w) node.el.style.width = "";
+      if (axes.h) node.el.style.height = "";
     }
 
     this.pending.clear();
@@ -142,4 +167,37 @@ export class Measurer {
     this.observers.clear();
     this.pending.clear();
   }
+}
+
+/**
+ * Which axes a node sizes to its own content, or null when neither does.
+ *
+ * An axis with nothing declared is intrinsic — that is what makes a `stack`
+ * created with no size mean "as big as what I hold" — and so is one declared
+ * auto, min-content, max-content, or fit-content.
+ */
+const FLOW_OWNING = new Set(["stack", "split", "grid", "dock", "flow"]);
+
+function intrinsicAxes(node) {
+  const g = node.geometry;
+  if (!g) return null;
+  // A root's box comes from its mount sizing (§5.11), not from `geometry` —
+  // which is empty on a root, so it reads as intrinsic on both axes. Unpinning
+  // one collapses whatever it hosts: a split container measured with its width
+  // removed resolves every `fr` track against nothing and comes back wider
+  // than the element that holds it.
+  const parent = node.parent;
+  if (!parent) return null;
+  // A child of a flow-owning algorithm has no size of its own to uncover
+  // (§9.1): the stylesheet already hands its box to CSS, so there is nothing
+  // for the engine to lift.
+  if (parent.algorithm && FLOW_OWNING.has(parent.algorithm)) return null;
+  const size = g.size && typeof g.size === "object" ? g.size : null;
+  const w = g.width != null ? g.width : size && size.w;
+  const h = g.height != null ? g.height : size && size.h;
+  const axes = {
+    w: w == null || isIntrinsic(parse(w)),
+    h: h == null || isIntrinsic(parse(h))
+  };
+  return axes.w || axes.h ? axes : null;
 }

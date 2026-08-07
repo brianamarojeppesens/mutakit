@@ -1789,6 +1789,26 @@ describe("ecosystem (§26 M6)", () => {
     t.equal(typeof mk.persist, "function", "and a created instance has the preset's plugins");
   });
 
+  test("an auto size measures the node's own content, not its parent (§6.5)", async (t) => {
+    const { mk, app } = fixture(t);
+    // Custom properties inherit, so a node the engine had not sized read its
+    // *parent's* `--mk-w` and the `auto` fallback was unreachable below the
+    // root: every auto size silently resolved to the parent's width. Nothing
+    // looked broken — the box was simply always as big as its container.
+    const auto = app.create("pane", {
+      id: "auto-box", at: "top-left", inset: 8,
+      content: "Hello there", size: { w: "auto", h: "auto" }
+    });
+    mk.tick();
+    await mk.flush({ animations: false });
+
+    t.ok(auto.node.computed.w > 0, "it has a width");
+    t.ok(auto.node.computed.w < 400, "and it is the text's, not the 1000px frame's");
+    t.ok(auto.node.computed.h < 100, "same on the block axis");
+    t.close(auto.node.computed.w, auto.el.getBoundingClientRect().width, 1,
+      "and the engine's number agrees with the box the browser drew");
+  });
+
   test("dock arbitrates its corners and contributes insets to the centre (§7.4)", (t) => {
     const { mk, app } = fixture(t);
     mk.applyAlgorithm(app.node, "dock", {
