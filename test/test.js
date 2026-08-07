@@ -640,6 +640,67 @@ describe("traits (§9)", () => {
   });
 });
 
+describe("content interop (§8.8)", () => {
+  test("adoption writes only what the contract allows, and undoes it", (t) => {
+    const { mk, app, host } = fixture(t);
+    const elsewhere = t.sandbox();
+
+    // §8.8 states this as a guarantee rather than a behaviour, because
+    // incremental adoption depends on it: an adopted node keeps its children,
+    // classes, listeners, and inline style, and gets back exactly what it had.
+    const make = () => {
+      const el = document.createElement("section");
+      el.className = "theirs other";
+      el.setAttribute("data-theirs", "keep me");
+      el.style.background = "rgb(1, 2, 3)";
+      el.append(document.createElement("span"), document.createElement("span"));
+      elsewhere.appendChild(el);
+      return el;
+    };
+
+    const adopted = make();
+    let clicks = 0;
+    adopted.addEventListener("click", () => clicks++);
+    const original = adopted.getAttribute("style");
+
+    const handle = mk.adopt(adopted, { at: "top-left", inset: 20, size: { w: 200, h: 120 } });
+    mk.tick();
+    adopted.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    t.deepEqual(rect(handle), [20, 20, 200, 120], "it takes over the geometry");
+    t.equal(adopted.className, "theirs other", "and touches nothing else: not classes");
+    t.equal(adopted.childElementCount, 2, "not children");
+    t.equal(adopted.getAttribute("data-theirs"), "keep me", "not attributes");
+    t.equal(adopted.style.background, "rgb(1, 2, 3)", "not inline style it did not write");
+    t.equal(clicks, 1, "and not listeners");
+    t.ok(adopted.style.getPropertyValue("--mk-w"), "what it writes are the §12.4 properties");
+
+    // On destroy: `return` restores the original parent and inline style.
+    mk.destroy(handle.node);
+    mk.tick();
+    t.equal(adopted.parentElement, elsewhere, "return puts it back where it was");
+    t.equal(adopted.getAttribute("style"), original, "with the style it arrived with");
+
+    // `detach` and `remove` differ in placement but must leave no residue
+    // either — the geometry properties were cleaned and the state mirrors and
+    // `data-mk-*` attributes were not, on the one node an author cannot simply
+    // reset, because the whole point of adoption is that it is theirs.
+    for (const mode of ["detach", "remove"]) {
+      const element = make();
+      const before = element.getAttribute("style");
+      const adoption = mk.adopt(element, { at: "top-left", inset: 5, size: { w: 50, h: 50 }, onDestroy: mode });
+      mk.tick();
+      mk.destroy(adoption.node);
+      mk.tick();
+      t.equal(element.getAttribute("style"), before, `${mode}: no style residue`);
+      t.equal([...element.attributes].filter((a) => a.name.startsWith("data-mk-")).length, 0,
+        `${mode}: no data-mk-* residue`);
+      t.equal(element.className, "theirs other", `${mode}: still theirs`);
+    }
+    t.equal(host.querySelectorAll("[data-mk-adopted]").length, 0);
+  });
+});
+
 describe("lookup and identity (§8.9)", () => {
   test("byId, query, and duplicate ids", (t) => {
     const { mk, app } = fixture(t);

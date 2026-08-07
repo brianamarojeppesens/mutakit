@@ -820,8 +820,24 @@ export class MutakitInstance extends Kernel {
     }
 
     node.own(() => {
+      // Undo precisely what §8.8's contract says was written: the geometry
+      // custom properties, the state mirrors, and the `data-mk-*` attributes.
+      // Only the geometry half was removed, so `detach` and `remove` handed
+      // back an element still carrying `--mk-state-*` and `data-mk-*` —
+      // residue on a node Mutakit had explicitly let go of, and the one case
+      // where an author cannot simply reset the element, because the whole
+      // point of adoption is that the element is theirs.
+      //
+      // `return` restores `cssText` wholesale below, so this is belt and
+      // braces there and the only cleanup for the other two.
       target.removeAttribute("data-mk-adopted");
       for (const property of GEOMETRY_PROPERTY_NAMES) target.style.removeProperty(property);
+      for (const property of [...target.style]) {
+        if (property.startsWith(`--${this.prefix}-`)) target.style.removeProperty(property);
+      }
+      for (const attribute of [...target.attributes]) {
+        if (attribute.name.startsWith("data-mk-")) target.removeAttribute(attribute.name);
+      }
       const policy = node.adopted.onDestroy;
       if (policy === "remove") dom.remove(target);
       else if (policy === "return" && node.adopted.parent) {
