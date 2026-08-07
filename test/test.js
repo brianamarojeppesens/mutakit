@@ -1789,6 +1789,28 @@ describe("ecosystem (§26 M6)", () => {
     t.equal(typeof mk.persist, "function", "and a created instance has the preset's plugins");
   });
 
+  test("what the engine computes is where the browser draws it (P1)", (t) => {
+    const { mk, app, host } = fixture(t);
+    // Every test until this one asserted `node.computed`, so nothing noticed
+    // that the DOM disagreed. `[data-mk-algorithm="anchor"]` had the same
+    // specificity as `.mk-node` and sat in a later layer, so every node — the
+    // algorithm is the default, so that is every node — was relatively
+    // positioned, and a relative box offsets from where flow put it. The
+    // engine said y=200; the browser drew 250, displaced by the sibling above.
+    const first = app.create("pane", { id: "row-1", at: "top-left", inset: 10, size: { w: 100, h: 50 } });
+    const second = app.create("pane", {
+      id: "row-2", at: "top-left", inset: { left: 10, top: 200 }, size: { w: 100, h: 50 }
+    });
+    mk.tick();
+
+    const origin = host.getBoundingClientRect();
+    for (const handle of [first, second]) {
+      const drawn = handle.el.getBoundingClientRect();
+      t.close(drawn.left - origin.left, handle.node.computed.x, 1, `${handle.node.id}: x agrees`);
+      t.close(drawn.top - origin.top, handle.node.computed.y, 1, `${handle.node.id}: y agrees`);
+    }
+  });
+
   test("an auto size measures the node's own content, not its parent (§6.5)", async (t) => {
     const { mk, app } = fixture(t);
     // Custom properties inherit, so a node the engine had not sized read its

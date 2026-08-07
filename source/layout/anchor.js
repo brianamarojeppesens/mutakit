@@ -34,7 +34,18 @@ export const anchorLayout = {
   },
 
   styles: `
-    [data-mk-algorithm="anchor"] {
+    /*
+     * The :not(.mk-node) guard is load-bearing, not tidiness. This rule and
+     * the base stylesheet's absolute positioning have the same specificity,
+     * and the layout layer comes after base — so without the guard every node
+     * hosting this algorithm (which is every node, since it is the default)
+     * turned relative, and a relatively positioned box offsets from where flow
+     * put it. The engine wrote y=200 and the browser drew the element at 250,
+     * displaced by the height of the sibling above it. Absolute positioning
+     * establishes a containing block just as relative does, so the guard costs
+     * nothing: the root, which is not a node element, still gets it.
+     */
+    [data-mk-algorithm="anchor"]:not(.mk-node) {
       position: relative;
     }
     [data-mk-algorithm="anchor"] > .mk-node {

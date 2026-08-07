@@ -118,7 +118,7 @@ export const dockLayout = {
   },
 
   styles: `
-    [data-mk-algorithm="dock"] { position: relative; }
+    [data-mk-algorithm="dock"]:not(.mk-node) { position: relative; }
     [data-mk-algorithm="dock"] > .mk-node {
       position: absolute;
       left: var(--mk-x, 0px);
@@ -432,7 +432,8 @@ export const freeLayout = {
   },
 
   styles: `
-    [data-mk-algorithm="free"] { position: relative; overflow: hidden; }
+    [data-mk-algorithm="free"]:not(.mk-node) { position: relative; }
+    [data-mk-algorithm="free"] { overflow: hidden; }
     [data-mk-algorithm="free"] > .mk-node { z-index: var(--mk-z, auto); }
   `
 };
