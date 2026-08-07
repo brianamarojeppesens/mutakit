@@ -120,6 +120,53 @@ describe("elements", () => {
     t.throws(() => probe.set({ value: 99 }), /MK3005/);
   });
 
+  test("a signal in geometry or content is read, never written (§15.1, §15.2)", (t) => {
+    const { mk, app } = fixture(t);
+
+    // A signal is a function, and so are two other things the engine accepts:
+    // a computed length, and a content producer. Both are *called with an
+    // argument* — the length context, the element ctx — and calling a signal
+    // accessor with an argument writes to it. So passing a store slice as a
+    // size or as content did not fail to resolve; it replaced the stored value
+    // with an internal object, silently, on the first frame.
+    const store = mk.store("sig-layout", { size: 240, title: "Files" });
+    const size = store.select("size");
+    const title = store.select("title");
+
+    const pane = app.create("pane", { id: "sig-p", at: "top-left", size: { w: size, h: 100 } });
+    const labelled = app.create("pane", { id: "sig-c", content: title, at: "top-right", size: { w: 200, h: 40 } });
+    mk.tick();
+
+    t.equal(size(), 240, "the signal still holds its own value");
+    t.equal(title(), "Files");
+    t.equal(pane.node.computed.w, 240, "and the geometry resolved from it");
+    t.equal(labelled.el.textContent, "Files");
+
+    // Geometry is not a prop, so nothing bound it: the value was never wrong,
+    // only stale — the box kept whatever the last arrange happened to compute.
+    store.set("size", 320);
+    store.set("title", "Explorer");
+    mk.tick();
+    t.equal(pane.node.computed.w, 320, "a write moves the box");
+    t.equal(labelled.el.textContent, "Explorer", "and updates the content");
+
+    // Including when the kind of length changes.
+    store.set("size", "50%");
+    mk.tick();
+    t.equal(pane.node.computed.w, 500, "a percentage resolves against the frame");
+
+    // The two callables that are not signals still behave as before.
+    const produced = app.create("pane", {
+      id: "sig-f", content: (ctx) => `made by ${ctx.node.id}`, at: "bottom-left", size: { w: 200, h: 40 }
+    });
+    const computed = app.create("pane", {
+      id: "sig-len", at: "bottom-right", size: { w: (lenCtx) => lenCtx.basis / 4, h: 40 }
+    });
+    mk.tick();
+    t.equal(produced.el.textContent, "made by sig-f", "a content producer still receives ctx");
+    t.equal(computed.node.computed.w, 250, "and a computed length still receives the len context");
+  });
+
   test("a signal passed as a prop keeps the element in sync", (t) => {
     const { mk, app } = fixture(t);
     const health = Mutakit.signal(50);

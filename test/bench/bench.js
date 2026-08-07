@@ -30,7 +30,24 @@ function median(values) {
   return sorted[Math.floor(sorted.length / 2)];
 }
 
+/**
+ * The median of `runs` timed iterations, after a few untimed ones.
+ *
+ * Without the warm-up the first frames carry JIT compilation of the very code
+ * path being measured, and the median of twenty absorbs only some of it: the
+ * split-drag scenario reported anywhere from 3.1 to 4.5 ms against a 4 ms
+ * budget on identical code, failing about one run in four. A gate that cries
+ * wolf that often is one people learn to re-run rather than read, which is
+ * worse than not having it — §20.3 wants a 10% regression to block a release,
+ * and that signal has to be visible above the noise.
+ *
+ * Repeating the same scenario in isolation put the median at 2.74 ms with a
+ * 3.72 worst case, so the budget is not tight; the measurement was.
+ */
+const WARMUP = 3;
+
 function measure(runs, fn) {
+  for (let i = 0; i < WARMUP; i++) fn(i);
   const timings = [];
   for (let i = 0; i < runs; i++) {
     const started = performance.now();
