@@ -1526,6 +1526,30 @@ describe("HUD and game (§11.5, S3)", () => {
     t.equal(getComputedStyle(hud.el).pointerEvents, "none", "and the layer is transparent to the pointer");
   });
 
+  test("§18.5's opening and closing lines, which nothing exercised (§16.1)", (t) => {
+    const { mk } = fixture(t);
+    // Line 1. A band had no spelling of its own: every overlay family reaches
+    // one by declaring `layer` on its type, but a *layer* had to be assembled
+    // by hand from the right host type and four edge constraints.
+    const hud = mk.layer("hud", { of: "viewport", insets: "safe" });
+    mk.tick();
+    t.equal(hud.node.type, "hud-layer", "a band with a host type gets it");
+    t.deepEqual(rect(hud), [0, 0, 1000, 800], "and it is full-frame without being told");
+    t.equal(mk.layer("docked").node.type, "pane", "a band without one gets a plain pane");
+
+    // The abilities line. `children` was a tier-2 word tier 1 could not say, so
+    // this stack came out 0×0 with nothing in it.
+    const abilities = hud.create("stack", {
+      id: "abilities", at: "bottom", inset: { bottom: 24 }, axis: "x", gap: 8,
+      children: [{ type: "pane", id: "q", size: { w: 40, h: 40 } },
+                 { type: "pane", id: "w", size: { w: 40, h: 40 } }]
+    });
+    mk.tick();
+    t.equal(abilities.node.children.length, 2, "both slots are built");
+    t.ok(mk.byId("q") && mk.byId("w"), "each is addressable, so each is a real element");
+    t.equal(abilities.node.children[0].parent, abilities.node, "and parented to the stack");
+  });
+
   test("hud-* elements are presentational by default, and a meter is not", (t) => {
     const { mk, app } = fixture(t);
     const hud = app.create("hud-layer", { id: "h2" });
