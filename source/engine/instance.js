@@ -470,6 +470,21 @@ export class MutakitInstance extends Kernel {
     const own = {};
 
     const slots = definition.slots || null;
+    // A key naming one of this node's traits is that trait's configuration —
+    // `_attachTraits` reads `options[name]` for exactly this. It is an engine
+    // key, like `traits` itself, and it was landing in `own` and being reported
+    // as an undeclared prop: `pane` with `traits: ["context-menu"]` and a
+    // `"context-menu": { items }` block put an MK3004 in the console for using
+    // the documented way to configure a trait.
+    //
+    // The same defect as `before` in STRUCTURAL_KEYS above, and not fixable in
+    // that list, because these names are not a fixed set — they depend on which
+    // traits this node actually has.
+    const traitNames = new Set();
+    for (const entry of [...(definition.traits || []), ...(options.traits || [])]) {
+      traitNames.add(typeof entry === "string" ? entry : entry.name);
+    }
+
     for (const key of Object.keys(options)) {
       // A prop the type declares wins the name. `min` and `max` are geometry
       // keys, and `meter`, `progress`, `slider`, and `number` all declare props
@@ -484,6 +499,9 @@ export class MutakitInstance extends Kernel {
       // A key naming a declared slot is a slot fill, not a prop. Props win the
       // name if a type declares both, since a prop is the narrower claim.
       else if (slots && slots[key] && !(key in definition.props)) continue;
+      // A declared prop still wins the name, as it does against geometry and
+      // slots above — the type's own declaration is the narrower claim.
+      else if (traitNames.has(key) && !(key in definition.props)) continue;
       else if (!STRUCTURAL_KEYS.has(key)) own[key] = options[key];
     }
     if (options.layout) node.layoutProps = { ...options.layout };
