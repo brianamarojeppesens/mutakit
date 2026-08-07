@@ -10,6 +10,11 @@ A dependency-free browser library that builds and mutates graphical user
 interfaces from declarative geometry — you describe *what element* and *where*,
 and the library resolves layout, interaction, accessibility, and styling.
 
+**[See it running →](https://brianamarojeppesens.github.io/mutakit/)** — the
+three driving scenarios, plus the test suite, the axe sweep and the benchmarks,
+all executing in your browser. The benchmark figures there are your machine's,
+not the ones quoted below.
+
 ```html
 <script src="https://github.com/brianamarojeppesens/mutakit/releases/latest/download/mutakit.min.js"></script>
 <script>
