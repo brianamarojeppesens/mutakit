@@ -165,7 +165,12 @@ export class Kernel {
 
   /** Register a placement strategy for anchored positioning (§10.5). */
   placement(name, strategy, options) {
-    return this.registry.set("placement", name, { name, ...strategy }, options);
+    // A function has no own enumerable properties, so `{ name, ...strategy }`
+    // stored `{ name }` and dropped the strategy on the floor — the record
+    // registered fine and did nothing, which is why §10.5's collision half
+    // could look wired from the registry and never run.
+    const record = typeof strategy === "function" ? { name, strategy } : { name, ...strategy };
+    return this.registry.set("placement", name, record, options);
   }
 
   /** Register a theme (§12, §10.6). */

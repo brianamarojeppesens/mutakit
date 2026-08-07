@@ -952,6 +952,42 @@ describe("leaks (§23.5)", () => {
 });
 
 describe("extension points (§10)", () => {
+  test("a registered anchor keyword and placement strategy are consulted (§10.5)", (t) => {
+    const { mk, app } = fixture(t);
+
+    // Neither registry had a single reader. `mk.anchor(…)` stored a resolver
+    // that was never called, and `mk.placement(…)` stored `{ name }` — the
+    // strategy is a function, and `{ name, ...fn }` spreads to nothing, so it
+    // was dropped at registration. Both were registrable and inert.
+    Mutakit.anchor("acme:golden", () => ({ fx: 0.618, fy: 0.618 }), { replace: true });
+    const golden = app.create("pane", {
+      id: "anch-g", at: "center", anchor: "acme:golden", size: { w: 100, h: 100 }
+    });
+    mk.tick();
+    t.close(golden.node.computed.x, 500 - 61.8, 1, "the custom anchor positions the box");
+    t.close(golden.node.computed.y, 400 - 61.8, 1);
+
+    let received = null;
+    Mutakit.placement("acme:corner", (info) => {
+      received = info;
+      return { box: { x: 5, y: 7, w: info.size.w, h: info.size.h }, placement: "top-start" };
+    }, { replace: true });
+
+    const popover = app.create("popover", {
+      id: "anch-p", reference: { x: 400, y: 300 }, strategy: "acme:corner", size: { w: 120, h: 80 }
+    });
+    mk.tick();
+
+    t.ok(received, "the strategy is called");
+    t.deepEqual([popover.node.computed.x, popover.node.computed.y], [5, 7], "and its box is used");
+    t.equal(popover.el.getAttribute("data-mk-placement"), "top-start",
+      "including the placement it chose");
+    // It is handed what it needs to make that choice, not just the numbers.
+    for (const key of ["reference", "size", "bounds", "placement", "anchorTo", "fits"]) {
+      t.ok(key in received, `it receives ${key}`);
+    }
+  });
+
   test("a registered input source is actually started (§10.8, §13.5)", (t) => {
     let attached = 0;
     let stopped = 0;

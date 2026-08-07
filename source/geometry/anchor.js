@@ -55,6 +55,24 @@ export function resolveAnchor(anchor, options) {
     const keyword = normalizeKeyword(anchor, opts);
     const pair = KEYWORDS[keyword];
     if (!pair) {
+      // A registered keyword, before giving up (§10.5). `opts.anchors` is a
+      // lookup function, the same shape `Len` uses for custom units — which is
+      // what makes both extension points reachable from geometry code that
+      // must not know a registry exists.
+      //
+      // Nothing consulted this registry at all: `mk.anchor('follow-cursor', …)`
+      // stored a resolver that was never called, so the extension point was
+      // registrable and inert.
+      const custom = opts.anchors && opts.anchors(anchor);
+      if (custom && typeof custom.resolve === "function") {
+        const resolved = custom.resolve(opts) || {};
+        return {
+          fx: resolved.fx || 0,
+          fy: resolved.fy || 0,
+          dx: resolved.dx || 0,
+          dy: resolved.dy || 0
+        };
+      }
       warn("MK1008", __MK_DEV__ &&
         `unknown anchor '${anchor}'; using 'top-left'`, { subject: anchor });
       return { fx: 0, fy: 0, dx: 0, dy: 0 };

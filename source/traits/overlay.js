@@ -150,6 +150,8 @@ export const positioned = {
       arrow: opts.arrow || null,
       hide: opts.hide !== false,
       corners: !!opts.corners,
+      /** A registered §10.5 collision strategy, by name. */
+      strategy: opts.strategy || null,
       padding: opts.padding == null ? 8 : opts.padding
     };
 
@@ -263,6 +265,21 @@ function place(ctx, state) {
   let placement = state.placement;
   let box = anchorTo(reference, size, placement, state.offset);
 
+  // A registered collision strategy replaces flip-and-shift wholesale (§10.5).
+  // Nothing consulted this registry: `mk.placement('flip-then-shift', …)`
+  // stored a strategy that was never called, so the half of §10.5 that exists
+  // for exactly this — "for popover collision handling" — was inert.
+  const custom = state.strategy && ctx.mk.registry.get("placement", state.strategy);
+  if (custom && typeof custom.strategy === "function") {
+    const result = ctx.mk.guard(node, `placement:${state.strategy}`, custom.strategy, [
+      { reference, size, bounds, placement, state, anchorTo, fits }
+    ]);
+    if (result && result.box) {
+      applyBox(ctx, node, result.box, result.placement || placement, state, reference);
+      return;
+    }
+  }
+
   if (state.flip && !R.containsRect(inset(bounds, state.padding), box)) {
     // `corners` is the context-menu response: with a zero-size reference there
     // is no trigger to stay attached to, so the right answer is to open from a
@@ -292,6 +309,15 @@ function place(ctx, state) {
     });
   }
 
+  applyBox(ctx, node, box, placement, state, reference);
+}
+
+/**
+ * Write the resolved box. Shared by the built-in path and by a registered
+ * §10.5 strategy, so a custom collision handler produces the same custom
+ * properties, the same `data-mk-placement`, and the same `reposition` event.
+ */
+function applyBox(ctx, node, box, placement, state, reference) {
   state.resolved = placement;
   // Written directly rather than re-constrained. `positioning: 'self'` means
   // this element owns its box (§9.1), and routing through the parent's

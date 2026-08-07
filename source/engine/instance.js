@@ -1408,7 +1408,12 @@ export class MutakitInstance extends Kernel {
     // With no edges given, `at`/`anchor`/`offset`/`inset` place the box.
     if (!hasEdges && (geometry.at != null || geometry.anchor != null || geometry.inset != null)) {
       const container = { x: 0, y: 0, w: frame.w, h: frame.h };
-      const options = { direction: this.options.direction, lenCtx: this.lenContext(frame.w, child) };
+      const options = {
+        direction: this.options.direction,
+        lenCtx: this.lenContext(frame.w, child),
+        // §10.5's anchor keywords, looked up the way §10.4's units are.
+        anchors: (name) => this.registry.get("anchor", name)
+      };
       box = place(container, { w: box.w, h: box.h }, geometry, options);
       const nudge = insetOffset(geometry.at, geometry.inset, options);
       box.x += nudge.x;

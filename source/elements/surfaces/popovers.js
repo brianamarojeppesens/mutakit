@@ -25,6 +25,8 @@ export const popover = {
     arrow: { type: "boolean", default: false },
     flip: { type: "boolean", default: true },
     shift: { type: "boolean", default: true },
+    /** A registered collision strategy by name, replacing flip/shift (§10.5). */
+    strategy: { type: "string" },
     dismiss: { type: "enum", values: ["light", "modal", "none"], default: "light" },
     trapFocus: { type: "boolean", default: false }
   },
@@ -58,7 +60,8 @@ export const popover = {
         arrow: ctx.props.arrow,
         flip: ctx.props.flip,
         shift: ctx.props.shift,
-        corners: !!ctx.props.contextMode
+        corners: !!ctx.props.contextMode,
+        strategy: ctx.props.strategy || null
       },
       dismissible: { policy: ctx.props.dismiss }
     };
