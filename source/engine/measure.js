@@ -139,7 +139,19 @@ export class Measurer {
       if (node.measureSync && node.el) forced.push(node);
       else if (node.el) {
         this.observe(node);
-        if (!node.measured) forced.push(node); // first frame only
+        // A node only reaches here with MEASURE actually set, which means
+        // something said its content changed. The observer cannot answer that
+        // question for an intrinsically sized node: the engine pins such a node
+        // to its last measurement, so its own box does not move when its
+        // contents grow, and the observer watching that box sees nothing. A
+        // `notification-feed` measured empty at create and stayed nought high
+        // however many messages it was given.
+        //
+        // Only an unpinned read can tell, so intrinsic nodes take the forced
+        // path. It stays batched into the single reflow below, and a node with
+        // both axes fixed still costs nothing — for those the observer really
+        // is enough.
+        if (!node.measured || intrinsicAxes(node)) forced.push(node);
         else clear(node, MEASURE);
       } else {
         clear(node, MEASURE);
