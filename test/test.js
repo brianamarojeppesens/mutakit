@@ -757,6 +757,224 @@ function splitDrag(app, index, delta) {
 }
 
 
+describe("overlays (§11.2, §16)", () => {
+  test("a modal is centred, focus-trapped, and backed by one shared backdrop", (t) => {
+    const { mk, app } = fixture(t);
+    const trigger = app.create("pane", { id: "trigger", at: "top-left", size: { w: 80, h: 30 } });
+    trigger.el.tabIndex = 0;
+    trigger.el.focus();
+
+    const first = app.create("modal", { id: "m1", title: "Settings" });
+    const second = app.create("modal", { id: "m2", title: "Nested" });
+    mk.tick();
+
+    t.deepEqual(rect(first), [100, 60, 800, 680], "80% × 85%, centred (§5.9)");
+    t.equal(first.el.getAttribute("role"), "dialog");
+    t.equal(first.el.getAttribute("aria-modal"), "true");
+    t.equal(first.el.getAttribute("aria-labelledby"), "m1-title");
+
+    const backdrops = app.el.querySelectorAll("[data-mk-backdrop]");
+    t.equal(backdrops.length, 1, "two stacked modals produce one backdrop (§16.2)");
+
+    const layers = mk.service("layers");
+    t.equal(layers.topOf("modal"), second.node, "and the second is on top");
+    t.ok(Number(second.el.style.zIndex) > Number(first.el.style.zIndex), "within one band");
+
+    second.close();
+    mk.tick();
+    t.equal(second.node.destroyed, true);
+    t.equal(app.el.querySelectorAll("[data-mk-backdrop]").length, 1, "the backdrop survives for m1");
+    first.close();
+    mk.tick();
+    t.equal(app.el.querySelectorAll("[data-mk-backdrop]").length, 0, "and goes with the last one");
+  });
+
+  test("Escape dismisses the topmost overlay only, and a veto stops it", (t) => {
+    const { mk, app } = fixture(t);
+    const modal = app.create("modal", { id: "guarded", title: "Unsaved" });
+    mk.tick();
+
+    modal.on("beforeclose", (event) => event.preventDefault());
+    key(document.documentElement, "Escape");
+    mk.tick();
+    t.equal(modal.node.destroyed, false, "an unsaved-changes guard vetoes the close (§9)");
+
+    modal.node._listeners.beforeclose.length = 0;
+    key(document.documentElement, "Escape");
+    mk.tick();
+    t.equal(modal.node.destroyed, true);
+  });
+
+  test("focus is trapped, then restored to what had it", (t) => {
+    const { mk, app } = fixture(t);
+    const before = document.createElement("button");
+    before.textContent = "opener";
+    app.el.appendChild(before);
+    t.cleanup(() => before.remove());
+    before.focus();
+
+    const modal = app.create("modal", { id: "trapped", title: "Trap" });
+    modal.create("pane", { content: "body" });
+    mk.tick();
+    t.ok(modal.el.contains(document.activeElement), "focus moved inside");
+
+    modal.close();
+    mk.tick();
+    t.equal(document.activeElement, before, "and came back out");
+  });
+
+  test("a dialog's declarative actions keep it serializable (§18.2)", (t) => {
+    const { mk, app } = fixture(t);
+    const seen = [];
+    const dialog = app.create("dialog", {
+      id: "prefs",
+      title: "Preferences",
+      description: "Choose a theme.",
+      actions: [
+        { label: "Cancel", command: "cancel" },
+        { label: "Save", command: "submit", variant: "primary", result: "saved" }
+      ]
+    });
+    dialog.on("action", (event) => seen.push(event.detail));
+    mk.tick();
+
+    t.equal(dialog.el.getAttribute("aria-describedby"), "prefs-desc");
+    const buttons = dialog.el.querySelectorAll(".mk-button");
+    t.equal(buttons.length, 2);
+    buttons[1].click();
+    t.deepEqual(seen, [{ action: "submit", result: "saved" }], "no JavaScript callback needed");
+  });
+
+  test("a popover flips when it would be clipped (§16.3)", (t) => {
+    const { mk, app } = fixture(t);
+    // A trigger near the bottom edge: `bottom` placement does not fit.
+    const trigger = app.create("pane", { id: "trg", left: 100, top: 760, size: { w: 80, h: 30 } });
+    mk.tick();
+
+    const pop = app.create("popover", {
+      id: "pop",
+      reference: trigger.el,
+      placement: "bottom",
+      size: { w: 200, h: 120 }
+    });
+    mk.tick();
+    mk.tick();
+
+    t.equal(pop.el.getAttribute("data-mk-placement"), "top", "it flipped to the side that fits");
+    t.ok(pop.node.computed.y + pop.node.computed.h <= 800, "and stays inside the frame");
+  });
+
+  test("a virtual reference is a function, re-read every frame (§16.3)", (t) => {
+    const { mk, app } = fixture(t);
+    let cursor = { x: 200, y: 200, w: 0, h: 0 };
+    const pop = app.create("popover", {
+      id: "follow",
+      reference: () => cursor,
+      placement: "bottom-start",
+      size: { w: 120, h: 40 }
+    });
+    mk.tick();
+    mk.tick();
+    t.close(pop.node.computed.x, 200, 1);
+
+    cursor = { x: 500, y: 300, w: 0, h: 0 };
+    mk.tick();
+    t.close(pop.node.computed.x, 500, 1, "no placeholder element was needed");
+  });
+
+  test("a menu is one tab stop with roving focus (§13.4)", (t) => {
+    const { mk, app } = fixture(t);
+    const chosen = [];
+    const menu = app.create("menu", {
+      id: "ctx",
+      reference: { x: 100, y: 100, w: 0, h: 0 },
+      items: [
+        { label: "Cut", shortcut: "Ctrl+X" },
+        { label: "Copy" },
+        { separator: true },
+        { label: "Paste", disabled: true }
+      ]
+    });
+    menu.on("select", (event) => chosen.push(event.detail.item.label));
+    mk.tick();
+
+    const items = menu.el.querySelectorAll(".mk-menu__item");
+    t.equal(items.length, 3);
+    t.equal(items[0].getAttribute("tabindex"), "0", "one tab stop");
+    t.equal(items[1].getAttribute("tabindex"), "-1");
+
+    key(menu.el, "ArrowDown");
+    t.equal(items[1].getAttribute("tabindex"), "0", "arrows move within it");
+    key(menu.el, "End");
+    t.equal(items[2].getAttribute("data-mk-active"), "", "End reaches the last item");
+
+    key(menu.el, "Home");
+    key(menu.el, "ArrowDown");
+    key(menu.el, "Enter");
+    t.deepEqual(chosen, ["Copy"], "and choosing one closes the menu");
+    t.equal(menu.node.destroyed, true);
+  });
+
+  test("a toast announces through the shared live region and expires", (t) => {
+    const { mk, app } = fixture(t);
+    const toast = app.create("toast", { id: "saved", text: "Layout saved", ttl: 0 });
+    mk.tick();
+
+    const announcer = mk.service("announcer");
+    t.ok(announcer.regions.polite, "one polite region per instance (§14)");
+    t.equal(announcer.regions.polite.textContent, "Layout saved");
+    t.equal(toast.el.getAttribute("role"), "status");
+
+    const records = [];
+    Mutakit.diagnostics.sink((record) => records.push(record));
+    t.cleanup(() => Mutakit.diagnostics.sink(null));
+    announcer.say("Layout saved");
+    t.ok(records.some((r) => r.code === "MK6003"), "a repeat inside the window is dropped");
+  });
+
+  test("a tooltip host waits, shows on focus, and cleans up after itself", (t) => {
+    const { mk, app } = fixture(t);
+    mk.define({
+      type: "acme:field",
+      a11y: { role: "textbox" },
+      traits: ["tooltip-host"],
+      props: { tooltip: { type: "string", default: "" } },
+      create: (ctx) => ctx.dom("div")
+    });
+    const field = app.create("acme:field", { tooltip: "The port to listen on", size: { w: 80, h: 24 } });
+    mk.tick();
+
+    const host = field.trait("tooltip-host");
+    t.equal(host.visible, false, "nothing on hover intent alone");
+    host.show();
+    mk.tick();
+    t.equal(host.visible, true);
+    t.ok(mk.query("tooltip"), "one tooltip element, delegated");
+
+    host.hide();
+    mk.tick();
+    t.equal(mk.query("tooltip"), null);
+  });
+
+  test("scroll locking is reference counted, so nested overlays do not double-lock", (t) => {
+    const { mk, app } = fixture(t);
+    const layers = mk.service("layers");
+    const a = app.create("modal", { id: "s1" });
+    const b = app.create("modal", { id: "s2" });
+    mk.tick();
+    t.equal(layers.scrollLocks, 2);
+    t.equal(document.documentElement.style.overflow, "hidden");
+
+    b.close();
+    mk.tick();
+    t.equal(document.documentElement.style.overflow, "hidden", "still locked for the first");
+    a.close();
+    mk.tick();
+    t.equal(document.documentElement.style.overflow, "", "and released exactly once");
+  });
+});
+
+
 function rect(handle) {
   const r = handle.node.computed;
   return [round(r.x), round(r.y), round(r.w), round(r.h)];

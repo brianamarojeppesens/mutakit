@@ -124,7 +124,10 @@ for (const file of files) {
   for (const match of code.matchAll(DEFINITION)) {
     const start = match.index;
     const body = objectAt(code, code.indexOf("{", start));
-    if (!/\ba11y:/.test(body) && !/\babstract:\s*true/.test(body)) {
+    // A type that `extends` another inherits its declaration, which a text
+    // scan cannot resolve. The runtime check (MK3006) sees the merged
+    // definition and is exact, so deferring to it here beats a false positive.
+    if (!/\ba11y:/.test(body) && !/\babstract:\s*true/.test(body) && !/\bextends:/.test(body)) {
       problems.push(
         `${relative}: element type '${match[1]}' declares no \`a11y\`. Declare a role, ` +
           `or opt out explicitly with a11y: 'presentation' (P5).`

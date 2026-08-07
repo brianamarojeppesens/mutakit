@@ -319,3 +319,11 @@ sanctioned exception and animates a `grid-template-rows` `0fr → 1fr` track.
 keyboard equivalent (P5, §13.4). Enforced by the conformance check and the
 build lint.
 **Fix.** Declare `keys` on the trait or the element type.
+
+### MK6003 — Live-region announcement was rate limited
+**Cause.** The same message was announced twice within two seconds. A live
+region that fires on every keystroke is worse than none, so the announcer
+de-duplicates and rate limits (§14).
+**Fix.** Usually none — the drop is the correct behaviour. If the repeat is
+meaningful (a counter reaching the same value again), vary the text, or space
+the announcements out.

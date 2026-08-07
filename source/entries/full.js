@@ -7,6 +7,7 @@
  * the whole catalog, which is what they asked for by choosing this file.
  */
 import { Mutakit } from "./dock.js";
+import "./app.js";
 
 export { Mutakit };
 export default Mutakit;

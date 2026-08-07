@@ -89,6 +89,19 @@ function markSubtree(node) {
   return armed;
 }
 
+/**
+ * A node's *own* geometry inputs changed.
+ *
+ * `ARRANGE` propagates down (§6.2), which is right — but a node's box is
+ * computed by its **parent's** algorithm (§9.1), so marking the node alone
+ * re-arranges its children and leaves the node itself exactly where it was.
+ * Re-constraining an element therefore invalidates the parent, which is the
+ * one that can act on it.
+ */
+export function invalidateGeometry(node) {
+  return invalidate(node.parent || node, ARRANGE);
+}
+
 export function clear(node, bits) {
   node.flags &= ~bitsOf(bits);
 }

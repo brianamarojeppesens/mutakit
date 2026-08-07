@@ -23,7 +23,7 @@ import * as R from "../geometry/rect.js";
 import { axisSpecs, resolveAxis } from "../geometry/constraints.js";
 import { insetOffset, place } from "../geometry/anchor.js";
 import { LayoutNode, snapshot } from "./node.js";
-import { ARRANGE, MEASURE, PAINT, STYLE, clear, invalidate } from "./invalidate.js";
+import { ARRANGE, MEASURE, PAINT, STYLE, clear, invalidate, invalidateGeometry } from "./invalidate.js";
 import { Metrics } from "./metrics.js";
 import { Measurer } from "./measure.js";
 import { GEOMETRY_PROPERTIES, StyleCompiler } from "./compile.js";
@@ -238,6 +238,7 @@ export class MutakitInstance extends Kernel {
 
     this._mount(node);
     invalidate(node, MEASURE | ARRANGE | STYLE);
+    invalidateGeometry(node);
     return this.handleFor(node);
   }
 
@@ -402,7 +403,7 @@ export class MutakitInstance extends Kernel {
     for (const name of Object.keys(values)) {
       if (GEOMETRY_KEYS.has(name)) {
         target.geometry[name] = values[name];
-        invalidate(target, "arrange");
+        invalidateGeometry(target);
         continue;
       }
       if (name === "layout") {
@@ -440,6 +441,7 @@ export class MutakitInstance extends Kernel {
     this.persistDirty = true;
     emit(target, "propschange", { changed: [...changed] }, { bubbles: false });
     invalidate(target, STYLE | MEASURE | ARRANGE);
+    invalidateGeometry(target);
     return target;
   }
 
@@ -717,7 +719,13 @@ export class MutakitInstance extends Kernel {
     const requested = [...(definition.traits || []), ...(options.traits || [])];
     for (const entry of requested) {
       const name = typeof entry === "string" ? entry : entry.name;
-      const traitOptions = typeof entry === "string" ? options[name] : entry.options;
+      // Three sources, in order of specificity: the create() call, whatever the
+      // element's own `create` hook staged for the trait it composes, and the
+      // entry itself. Without the middle one an element cannot pass its props
+      // through to a trait, and every trait grows a second configuration
+      // surface to compensate.
+      const staged = node.state.traitOptions && node.state.traitOptions[name];
+      const traitOptions = typeof entry === "string" ? options[name] || staged : entry.options;
       this.attachTrait(node, name, traitOptions);
     }
   }
@@ -756,14 +764,19 @@ export class MutakitInstance extends Kernel {
     }
 
     const ctx = makeContext(target);
-    const record = { trait, api: {}, options: options || {} };
+    const record = { trait, api: {}, options: options || null };
     target.traits.set(name, record);
 
     const produced = this.guard(target, `trait:${name}.attach`, trait.attach || noop, [
       ctx,
-      record.options
+      record.options || {}
     ]);
-    if (produced && typeof produced === "object") Object.assign(record.api, produced);
+    if (produced && typeof produced === "object") {
+      // Descriptors, not `Object.assign`: a trait's `get visible()` is a live
+      // read of its own state, and assignment would copy the value it happened
+      // to have at attach time and freeze it there forever.
+      Object.defineProperties(record.api, Object.getOwnPropertyDescriptors(produced));
+    }
     if (trait.api) {
       for (const key of Object.keys(trait.api)) {
         record.api[key] = (...args) => trait.api[key](ctx, ...args);

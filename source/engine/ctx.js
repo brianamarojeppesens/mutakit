@@ -17,7 +17,7 @@ import { fail, warn } from "../core/diagnostics.js";
 import { addListener, emit as emitEvent } from "../core/events.js";
 import { effect } from "../core/signals.js";
 import { toNumber, parse } from "../geometry/len.js";
-import { invalidate } from "./invalidate.js";
+import { invalidate, invalidateGeometry } from "./invalidate.js";
 
 /** Build the context an element's lifecycle hooks receive. */
 export function makeContext(node) {
@@ -61,7 +61,7 @@ export function makeContext(node) {
     /** Declared geometry inputs — write to re-constrain the element. */
     constrain(values) {
       Object.assign(node.geometry, values);
-      invalidate(node, "arrange");
+      invalidateGeometry(node);
       return ctx;
     },
 

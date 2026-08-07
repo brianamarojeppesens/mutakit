@@ -4,6 +4,51 @@ All notable changes to Mutakit are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] — M3: overlays (S2 half working)
+
+The layer service, backdrop management, the `focus-trap` and `dismissible`
+traits, the focus manager, the `positioned` trait with flip and shift, and the
+surface family (PLAN.md §26 M3).
+
+### Added
+
+- **`modal`, `dialog`, `alert`, `drawer`, `popover`, `tooltip`, `menu`,
+  `toast`, `banner`** (§11.2), every one of them `extends: 'surface'` — which
+  is the reason `surface` is core rather than a plugin.
+- **The focus manager** (§13.4): `inert` on sibling content where supported
+  with a sentinel-node fallback, and restoration that survives the element it
+  would restore to having been removed — the common case after a
+  delete-and-close, and the one usually dropped.
+- **The announcer** (§14): one polite and one assertive live region per
+  instance, with de-duplication and rate limiting, because a live region that
+  fires on every keystroke is worse than none.
+- **`positioned`** (§16.3) with flip, shift, size, arrow, and hide, and the
+  **virtual reference** — `reference: () => Rect` — that makes a
+  cursor-following tooltip expressible without a placeholder element.
+- **Backdrops and scroll locks are reference counted** (§16.2): three stacked
+  modals produce one backdrop beneath the topmost, and nested overlays neither
+  double-lock nor prematurely unlock.
+- **Declarative dialog actions** (§18.2), so a whole dialog — buttons included
+  — stays serializable without JavaScript callbacks.
+
+### Fixed
+
+- **Re-constraining an element never moved it.** `ARRANGE` propagates *down*
+  (§6.2), which is correct, but a node's box is computed by its **parent's**
+  algorithm (§9.1) — so marking the node alone re-arranged its children and
+  left the node exactly where it was. Geometry changes now invalidate the
+  parent, which is the one that can act on them.
+- **Trait getters were frozen at attach time.** `Object.assign` evaluates a
+  getter and copies the value, so `get visible()`, `get dragging()`, and
+  `get focused()` all reported whatever they happened to be when the trait
+  attached. Copied by descriptor now.
+- **A focus trap installed during `attach` did nothing.** Traits attach before
+  the element joins the document, and focusing a detached element is a no-op.
+  The trap installs in `mount`, the first moment it can take effect.
+- An element could not pass its own props through to a trait it composes, so
+  every trait was growing a second configuration surface. `create` may now
+  stage options for the traits its type declares.
+
 ## [0.5.0] — M2: splits (S1 substantially working)
 
 The `split` algorithm with all of §7.3's interaction detail, the `resizer`

@@ -13,7 +13,7 @@ import "../core/dev.js";
 import { warn } from "../core/diagnostics.js";
 import { addListener, emit } from "../core/events.js";
 import { freeze } from "../geometry/rect.js";
-import { invalidate } from "./invalidate.js";
+import { invalidateGeometry } from "./invalidate.js";
 import { makeContext } from "./ctx.js";
 
 export class Handle {
@@ -112,7 +112,7 @@ export class Handle {
   /** Re-constrain geometry: sizes, anchors, edges (§5). */
   constrain(values) {
     Object.assign(this.node.geometry, values);
-    invalidate(this.node, "arrange");
+    invalidateGeometry(this.node);
     return this;
   }
 
