@@ -98,6 +98,12 @@ export class Persistence {
     }
     if (node.traits.size) out.traits = [...node.traits.keys()];
     if (node.content !== undefined) out.content = node.content;
+    // The author's own `class`/`style`, which the engine records at create.
+    // Under `allow: { props: 'schema' }` these are dropped again on the way
+    // back in — they write to DOM sinks, and that policy exists for documents
+    // you did not author. Under `allow: 'any'` they round trip.
+    if (node.className) out.class = node.className;
+    if (node.inlineStyle) out.style = node.inlineStyle;
 
     for (const hook of node.definition ? node.definition.hooks.serialize : []) {
       const extra = this.mk.guard(node, "serialize", hook, [this.mk.contextFor(node)]);
@@ -323,7 +329,26 @@ export class Persistence {
     }
     if (raw) {
       try {
-        this.restore(JSON.parse(raw), { allow: opts.allow, into: opts.into });
+        const doc = JSON.parse(raw);
+        // Replace what is there, do not add to it.
+        //
+        // `save()` serializes *everything* under `into`, and `restore()` builds
+        // nodes. Appending therefore made the two not inverses: an application
+        // that declares its default layout in code — which is the only way to
+        // have one on first run — got that layout plus the restored copy, then
+        // saved both, then restored both plus a fresh copy. The tree doubled on
+        // every reload, and no amount of refreshing helped because the growth
+        // was in storage, not in the page.
+        //
+        // Guarded, because clearing is destructive: a document with nothing in
+        // it never costs anyone their working layout. `restore` still appends,
+        // which is right for restoring a subtree into a container on purpose.
+        const specs = doc && (Array.isArray(doc.tree || doc) ? doc.tree || doc : [doc.tree || doc]);
+        if (specs && specs.length) {
+          const target = resolve(mk, opts.into) || mk.root;
+          if (target) for (const child of [...target.children]) mk.destroy(child);
+        }
+        this.restore(doc, { allow: opts.allow, into: opts.into });
       } catch (error) {
         warn("MK4016", __MK_DEV__ &&
           `'${key}' did not parse as a layout: ${error.message}`, { subject: key });
