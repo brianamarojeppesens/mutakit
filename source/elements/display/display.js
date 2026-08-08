@@ -92,6 +92,14 @@ export const icon = {
     return el;
   },
 
+  // Without this the glyph and its size were whatever `create` happened to see.
+  // Changing either prop afterwards updated the prop and nothing else: the
+  // engine held the new value and the browser went on drawing the old one.
+  update(ctx, changed) {
+    if (changed.has("name")) ctx.el.setAttribute("data-icon", ctx.props.name);
+    if (changed.has("size")) ctx.css({ "--mk-icon-size": lengthOf(ctx.props.size) });
+  },
+
   styles: css`
     .mk-icon {
       display: inline-block;
@@ -297,6 +305,10 @@ export const spinner = {
     const el = ctx.dom("span", { class: "mk-spinner" });
     ctx.css({ "--mk-spinner-size": lengthOf(ctx.props.size) });
     return el;
+  },
+
+  update(ctx, changed) {
+    if (changed.has("size")) ctx.css({ "--mk-spinner-size": lengthOf(ctx.props.size) });
   },
   styles: css`
     .mk-spinner {

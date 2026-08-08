@@ -627,7 +627,14 @@ export class MutakitInstance extends Kernel {
     const changed = new Set();
 
     for (const name of Object.keys(values)) {
-      if (GEOMETRY_KEYS.has(name)) {
+      // A prop the type declares wins the name, exactly as it does at create
+      // (see `_splitProps`). That rule was applied only there, so `min`, `max`
+      // and `size` reached the element the first time and were filed as
+      // geometry on every update afterwards: `meter.set({ max: 50 })` left
+      // `props.max` at its default, wrote 50 into the size clamp instead, and
+      // the bar went on drawing the old ratio. Silently — nothing rejects a
+      // geometry key.
+      if (GEOMETRY_KEYS.has(name) && !(definition && name in definition.props)) {
         target.geometry[name] = values[name];
         invalidateGeometry(target);
         continue;

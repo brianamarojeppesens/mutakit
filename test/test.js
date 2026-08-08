@@ -79,6 +79,48 @@ describe("mount", () => {
 });
 
 describe("elements", () => {
+  test("a declared prop keeps its name on update, not only at create", (t) => {
+    const { mk, app } = fixture(t);
+    // `min` and `max` are geometry key names, and `meter` declares props called
+    // exactly that. `create` has known this since `_splitProps` was written;
+    // `setProps` did not, so a range set after creation was filed as a size
+    // clamp and the bar went on drawing the old ratio. Nothing rejects a
+    // geometry key, so it failed in silence.
+    const meter = app.create("meter", { id: "m", value: 25, min: 0, max: 100, size: { w: 100, h: 8 } });
+    mk.tick();
+    t.equal(meter.el.style.getPropertyValue("--mk-meter-value"), "0.25", "quarter of nought-to-a-hundred");
+
+    meter.set({ max: 50 });
+    mk.tick();
+    t.equal(meter.node.props.max, 50, "the prop took the value");
+    t.equal(meter.el.style.getPropertyValue("--mk-meter-value"), "0.5", "and the bar redrew against it");
+
+    // A type that does *not* declare them still gets geometry, as before.
+    const pane = app.create("pane", { id: "p", size: { w: 40, h: 40 } });
+    mk.tick();
+    pane.set({ max: 120 });
+    mk.tick();
+    t.equal(pane.node.geometry.max, 120, "a pane's `max` is still a size clamp");
+    t.equal(pane.node.props.max, undefined, "and never became a prop");
+  });
+
+  test("presentational props redraw when they change", (t) => {
+    const { mk, app } = fixture(t);
+    // Both of these rendered from props in `create` and had no `update` hook at
+    // all, so changing them moved the prop and left the picture alone.
+    const icon = app.create("icon", { id: "i", name: "check", size: 16 });
+    const spinner = app.create("spinner", { id: "s", size: 20 });
+    mk.tick();
+
+    icon.set({ name: "close", size: 32 });
+    spinner.set({ size: 40 });
+    mk.tick();
+
+    t.equal(icon.el.getAttribute("data-icon"), "close", "the glyph follows");
+    t.equal(icon.el.style.getPropertyValue("--mk-icon-size"), "32px", "and so does its size");
+    t.equal(spinner.el.style.getPropertyValue("--mk-spinner-size"), "40px", "same for the spinner");
+  });
+
   test("create('pane') renders a positioned box — the M0 demo", (t) => {
     const { mk, app } = fixture(t);
     const pane = app.create("pane", { id: "box", size: { w: 240, h: 120 }, at: "top-left" });
