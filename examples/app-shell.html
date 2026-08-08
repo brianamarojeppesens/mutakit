@@ -115,7 +115,12 @@ Mutakit.default.service("shortcuts").bind("Mod+K", () => {
       options: ["Open Settings", "Toggle sidebar", "Reset layout"]
     }
   });
-  const combo = Mutakit.byId("palette-input");
+  // Scoped to this palette, not looked up globally. `Mutakit.byId` returns the
+  // *first* node registered under an id — documented, and it warns — and while
+  // a previous palette is still playing its exit animation there are two. Open
+  // the palette twice in quick succession and the second one bound its handler
+  // to the first one's combobox, so choosing a command did nothing at all.
+  const combo = palette.byId("palette-input");
   combo.on("change", (event) => {
     palette.close();
     if (event.detail.value === "Open Settings") openSettings();
