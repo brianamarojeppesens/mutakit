@@ -34,6 +34,6 @@ role `group`
 
 ## Layout
 
-Children are governed by the `anchor` algorithm (§7).
+Children are governed by the `stack` algorithm (§7).
 
 Slots: `control`, `default`

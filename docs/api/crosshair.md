@@ -8,7 +8,6 @@
 
 | Name | Type | Default | Constraints | Notes |
 |---|---|---|---|---|
-| `size` | `number` | `24` | — |  |
 | `state` | `idle` · `target` · `hit` · `reload` | `idle` | — |  |
 
 

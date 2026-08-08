@@ -44,6 +44,6 @@ role `dialog`
 
 ## Layout
 
-Children are governed by the `anchor` algorithm (§7).
+Children are governed by the `stack` algorithm (§7).
 
 Slots: `default`, `header`, `body`, `footer`

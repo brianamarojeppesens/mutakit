@@ -4,6 +4,59 @@ All notable changes to Mutakit are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/).
 
+## [1.0.1] — 2026-08-08
+
+Bug fixes only. No API surface changed, so nothing here needs a minor under the
+freeze declared in 1.0.0.
+
+Most of these were found the same way: by driving the examples and reading back
+what the browser actually drew, rather than what the engine had recorded. Almost
+every one is the same shape — a value written in one place and read from
+another, where only one of the two was kept up to date.
+
+### Fixed
+
+- **Split gutters.** A dragged pane was committed as fixed pixels, so a `1fr`
+  neighbour stopped flexing and collapsing a sibling left a gap that grew with
+  every drag. A collapsed pane could not be dragged or keyed back open at all.
+  Pressing the gutter of a closed pane overwrote its remembered width with the
+  collapsed zero. Re-opening did not clear the `--mk-w-*` the closing drag had
+  written, so the pane came back at its minimum while the engine believed
+  otherwise. A gesture begun before the next frame read a stale track model. And
+  the keyboard moved the reported value without moving the gutter, because it
+  never wrote the property the grid template reads.
+- **Layout.** `extends` inherited behaviour but not styling, so `dialog` matched
+  none of `modal`'s or `surface`'s rules. `modal` and `field` laid slot content
+  out on top of themselves. `dock` applied its own region insets to its own
+  frame, so a docked shell jumped by the width of its sidebar whenever anything
+  re-arranged — which also made `of: 'viewport'` overlays centre over the
+  content area instead of the viewport.
+- **Measurement.** The two measurement strategies read different boxes, so a
+  padded element shrank by its own padding on every re-measure. An intrinsic
+  node never re-measured when its content changed, so a `notification-feed`
+  stayed nought high however many messages it held. A partial `size` discarded
+  the type's default for the other axis.
+- **Props.** `setProps` filed any geometry-named key as geometry without asking
+  whether the type declared a prop by that name, so `meter.set({ max })` never
+  reached the meter. `icon` and `spinner` had no `update` hook. A trait's
+  configuration key was reported as an undeclared prop. `modal.initialFocus` was
+  declared and never read.
+- **Persistence.** `persist()` restored by adding to the tree rather than
+  replacing it, so a layout declared in code doubled on every reload; and
+  `class` and `style` were never recorded, so a restored layout came back
+  without its styling hooks.
+- **Accessibility.** Menu shortcuts were folded into the item's accessible name
+  instead of being exposed as `aria-keyshortcuts`.
+
+### Added
+
+- Continuous integration across all three §25.3 baseline engines, plus a
+  reproducible-build check and an advisory benchmark run.
+- The examples, the test suite, the axe sweep and the R1 measurement are
+  published to GitHub Pages.
+- `lint-arch` now points at the exact comment when a backtick inside a template
+  literal ends it early.
+
 ## [1.0.0] — 2026-08-07
 
 M7 (PLAN.md §26): the accessibility audit, the benchmark suite, the performance

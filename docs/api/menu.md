@@ -9,6 +9,7 @@
 | Name | Type | Default | Constraints | Notes |
 |---|---|---|---|---|
 | `arrow` | `boolean` | `false` | — |  |
+| `autoFocus` | `boolean` | `true` | — |  |
 | `contextMode` | `boolean` | `false` | — |  |
 | `dismiss` | `light` · `modal` · `none` | `light` | — |  |
 | `elevation` | `number` | `1` | min 0, max 3 |  |
@@ -22,6 +23,7 @@
 | `reference` | `any` | — | — |  |
 | `scroll` | `none` · `auto` · `x` · `y` | `none` | — |  |
 | `shift` | `boolean` | `true` | — |  |
+| `strategy` | `string` | — | — |  |
 | `trapFocus` | `boolean` | `false` | — |  |
 | `variant` | `plain` · `raised` · `sunken` | `raised` | — |  |
 
@@ -36,6 +38,7 @@
 
 - `close()`
 - `select()`
+- `closeChain()`
 
 ## Traits
 

@@ -35,11 +35,11 @@ not the ones quoted below.
 No build step, no framework, no runtime dependencies. A draggable split and a
 centred modal in the same vocabulary.
 
-> **Status: 1.0.0 — the API is frozen (PLAN.md §25.1).** All three driving
+> **Status: 1.0.1 — the API is frozen (PLAN.md §25.1).** All three driving
 > scenarios work: recursive splits with persistence (S1), the overlay and form
 > catalog (S2), and the HUD family at frame rate (S3). 58 element types, seven
 > layout algorithms, thirteen traits, nine gesture recognizers, five presets.
-> 154 browser tests, 128 unit tests, zero axe-core violations, and every
+> 164 browser tests, 128 unit tests, zero axe-core violations, and every
 > performance budget met. The risk register and the decision log both close
 > empty: R1, the CSS-delegation bet P1 rests on, is discharged across
 > Chromium, Firefox, and WebKit.

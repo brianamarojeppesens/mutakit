@@ -77,6 +77,7 @@ docs, and devtools from one declaration, so these pages cannot drift (§24).
 ## Traits
 
 - `collapsible`
+- `context-menu`
 - `dismissible`
 - `draggable`
 - `focus-trap`

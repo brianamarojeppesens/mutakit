@@ -20,6 +20,7 @@
 | `reference` | `any` | — | — |  |
 | `scroll` | `none` · `auto` · `x` · `y` | `none` | — |  |
 | `shift` | `boolean` | `true` | — |  |
+| `strategy` | `string` | — | — |  |
 | `trapFocus` | `boolean` | `false` | — |  |
 | `variant` | `plain` · `raised` · `sunken` | `raised` | — |  |
 
