@@ -171,6 +171,18 @@ function onPointerDown(ctx, event) {
   if (!split) return;
 
   const options = normalizeOptions(split.algorithmOptions);
+  // Start the gesture from a current model.
+  //
+  // `splitModel` is rebuilt during arrange, and collapsing or expanding only
+  // *invalidates* arrange — so a drag begun before that frame ran read a model
+  // that still said the pane was collapsed. A collapsed track is pinned to its
+  // collapsed size, `min` and `max` both, so the first pointermove resolved to
+  // zero and the pane snapped to its minimum: collapse, expand, then touch the
+  // gutter, and the sidebar jumped.
+  //
+  // One synchronous frame at pointerdown, not per move, and only where the
+  // gesture would otherwise read a stale answer.
+  ctx.mk.tick();
   const model = split.splitModel;
   if (!model) return;
 
@@ -311,6 +323,11 @@ function drag(ctx, delta) {
 function seedFromCurrent(ctx) {
   const split = ctx.node.parent;
   const options = normalizeOptions(split.algorithmOptions);
+  // As at pointerdown: the keyboard starts a gesture too, and it reads the same
+  // model. Expanding with Enter and pressing an arrow before the next frame
+  // resolved against a model that still said collapsed, and the pane went to
+  // zero. A gesture begins from a current model whichever device begins it (P5).
+  ctx.mk.tick();
   const model = split.splitModel;
   return {
     axis: options.axis,

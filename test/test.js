@@ -1713,6 +1713,40 @@ describe("layout: split (§7.3)", () => {
     t.equal(pane.node.layoutProps.collapsed, true, "a nudge below the threshold leaves it closed");
   });
 
+  test("a gesture begun before the next frame still sees the pane it can see", (t) => {
+    const { mk, app } = fixture(t);
+    const [pane] = app.split({
+      axis: "x",
+      gutter: { size: 6, draggable: true },
+      panes: [
+        { id: "stale-left", size: 200, min: 64, max: "40%", collapsible: { at: 40, to: 0 } },
+        { id: "stale-right", size: "1fr" }
+      ]
+    });
+    mk.tick();
+    const gutter = app.node.children.find((n) => n.type === "resizer");
+    const handle = mk.handleFor(gutter);
+    const width = pane.node.computed.w;
+
+    handle.toggle();
+    mk.tick();
+    t.equal(pane.node.layoutProps.collapsed, true, "collapsed");
+
+    // Expand, then resize *without* a frame in between — which is what a person
+    // does when they double-click a gutter and immediately drag it. The model a
+    // gesture reads is rebuilt during arrange, and toggling only invalidates
+    // arrange, so the drag used to resolve against a model that still said
+    // "collapsed". A collapsed track is pinned to its collapsed size, `min` and
+    // `max` both, so the first movement snapped the pane to its minimum.
+    handle.toggle();
+    handle.nudge(10);
+    mk.tick();
+
+    t.equal(pane.node.layoutProps.collapsed, false, "it is open");
+    t.ok(pane.node.computed.w > 64, "and not sitting at its minimum");
+    t.close(pane.node.computed.w, width + 10, 2, "it moved by the drag, from the width it had");
+  });
+
   test("keyboard: arrows resize, Shift multiplies, Enter toggles (§7.3, P5)", (t) => {
     const { mk, app, left } = brief(t);
     const gutter = app.node.children.find((n) => n.type === "resizer");
