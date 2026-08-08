@@ -1814,6 +1814,39 @@ describe("layout: split (§7.3)", () => {
       "which the browser agrees with — the stale custom property is gone");
   });
 
+  test("the keyboard moves the gutter after a drag, not just its reported value", (t) => {
+    const { mk, app } = fixture(t);
+    const [pane] = app.split({
+      axis: "x",
+      gutter: { size: 6, draggable: true },
+      panes: [
+        { id: "kbd-left", size: 250, min: 64, max: "40%" },
+        { id: "kbd-right", size: "1fr" }
+      ]
+    });
+    mk.tick();
+    const gutter = app.node.children.find((n) => n.type === "resizer");
+    const handle = mk.handleFor(gutter);
+
+    // A drag first. It writes `--mk-w-0`, and the track expression reads that
+    // in preference to the declared size — so afterwards the keyboard updated
+    // the size, `--mk-x` and `aria-valuenow` while the grid stayed pinned to
+    // whatever the drag left. The gutter did not move, and what the separator
+    // reported disagreed with where it was drawn.
+    handle.nudge(30);
+    mk.tick();
+    const afterDrag = pane.el.getBoundingClientRect().width;
+
+    handle.nudge(24);
+    mk.tick();
+    const afterKey = pane.el.getBoundingClientRect().width;
+
+    t.ok(afterKey > afterDrag, "the pane the browser drew actually grew");
+    t.close(afterKey, afterDrag + 24, 2, "by the amount the keyboard asked for");
+    t.close(Number(gutter.el.getAttribute("aria-valuenow")), afterKey, 1.5,
+      "and the value it reports is the width it is drawn at");
+  });
+
   test("keyboard: arrows resize, Shift multiplies, Enter toggles (§7.3, P5)", (t) => {
     const { mk, app, left } = brief(t);
     const gutter = app.node.children.find((n) => n.type === "resizer");

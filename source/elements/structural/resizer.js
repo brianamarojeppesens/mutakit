@@ -444,6 +444,30 @@ function commit(ctx, result) {
     ctx.mk.setLayoutProps(track.pane, { size });
   });
 
+  // And keep `--mk-w-{i}` agreeing with what was just committed.
+  //
+  // The track expression is `var(--mk-w-{i}, base)`, so that property outranks
+  // the declared size whenever it is set — and a pointer drag sets it on every
+  // move. The keyboard never wrote it, so once anything had been dragged, an
+  // arrow key updated the declared size, `--mk-x` and `aria-valuenow` while the
+  // grid template stayed pinned to the width the last drag left behind. The
+  // gutter did not move, and the reported position and the drawn one disagreed
+  // until the next drag happened to rewrite the property.
+  //
+  // Flexible tracks are left alone: they compile to `minmax(min, N fr)` and
+  // never read this property.
+  const pinned = {};
+  model.tracks.forEach((track, i) => {
+    if (track.collapsed || track.flexible) return;
+    const size = measured[i];
+    if (size == null || !isFinite(size)) return;
+    pinned[`--mk-w-${i}`] = `${Math.round(size * 100) / 100}px`;
+  });
+  if (Object.keys(pinned).length) {
+    ctx.mk.compiler.setAll(split, pinned);
+    ctx.mk.compiler.flush(split);
+  }
+
   if (result.collapse != null) {
     const track = model.tracks[result.collapse];
     track.pane.state.restoreSize = model.sizes[result.collapse];
