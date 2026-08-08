@@ -1783,6 +1783,37 @@ describe("layout: split (§7.3)", () => {
       "so it re-opens at the width it had, not at its minimum");
   });
 
+  test("collapsing by drag then re-opening by toggle gives back the real width", (t) => {
+    const { mk, app } = fixture(t);
+    const [pane] = app.split({
+      axis: "x",
+      gutter: { size: 6, draggable: true },
+      panes: [
+        { id: "css-left", size: 250, min: 64, max: "40%", collapsible: { at: 40, to: 0 } },
+        { id: "css-right", size: "1fr" }
+      ]
+    });
+    mk.tick();
+    const gutter = app.node.children.find((n) => n.type === "resizer");
+    const handle = mk.handleFor(gutter);
+    const width = pane.node.computed.w;
+
+    // Collapse by *dragging*, which is what writes `--mk-w-0: 0px`, and re-open
+    // by *toggling*, which is what used not to clear it. The declared size came
+    // back correct and the pane still rendered at its 64px floor, because the
+    // track expression reads that property in preference to the declaration.
+    handle.nudge(-(width + 60));
+    mk.tick();
+    t.equal(pane.node.layoutProps.collapsed, true, "closed by the drag");
+
+    handle.toggle();
+    mk.tick();
+    t.equal(pane.node.layoutProps.size, width, "the declared size is the width it had");
+    t.close(pane.node.computed.w, width, 1, "and so is the width it is actually drawn at");
+    t.close(pane.el.getBoundingClientRect().width, width, 1.5,
+      "which the browser agrees with — the stale custom property is gone");
+  });
+
   test("keyboard: arrows resize, Shift multiplies, Enter toggles (§7.3, P5)", (t) => {
     const { mk, app, left } = brief(t);
     const gutter = app.node.children.find((n) => n.type === "resizer");

@@ -258,12 +258,25 @@ function finish(ctx) {
 
 /**
  * Restore a collapsed pane to the size it had, not to a default (§7.3).
+ *
+ * Clearing `--mk-w-{i}` is half the job, not a detail. A drag writes that
+ * property every pointermove, and a drag that *collapses* a pane writes zero
+ * into it — where it stays. The track expression reads it in preference to the
+ * declared size, so restoring wrote the remembered width into `layoutProps` and
+ * the pane still came back at its floor: collapse by dragging, re-open by
+ * double-clicking, and the sidebar was 64px wide while the engine believed it
+ * was 255. The next click then committed the 64 it measured, making it true.
  */
-function restoreTrack(ctx, track) {
+function restoreTrack(ctx, track, index) {
   ctx.mk.setLayoutProps(track.pane, {
     collapsed: false,
     size: track.pane.state.restoreSize != null ? track.pane.state.restoreSize : track.min || 200
   });
+  const split = ctx.node.parent;
+  if (split && index != null && index >= 0) {
+    ctx.mk.compiler.setAll(split, { [`--mk-w-${index}`]: null });
+    ctx.mk.compiler.flush(split);
+  }
   ctx.emit("expand", { index: ctx.props.index, pane: track.pane.id });
 }
 
@@ -292,7 +305,7 @@ function restoreFromDrag(ctx, model, index, delta) {
     if (!track || !track.collapsed || !grows) continue;
     const at = typeof track.collapsible === "object" ? track.collapsible.at : track.min;
     if (Math.abs(delta) < (at || 0)) continue;
-    restoreTrack(ctx, track);
+    restoreTrack(ctx, track, index + i);
     return index + i;
   }
   return -1;
@@ -391,8 +404,6 @@ function commit(ctx, result) {
   // size, so the pane came back at its *minimum* rather than the width it had.
   // The memory was right all along; this was overruling it.
   if (result && result.restored !== undefined && result.restored !== -1) {
-    ctx.mk.compiler.setAll(split, { [`--mk-w-${result.restored}`]: null });
-    ctx.mk.compiler.flush(split);
     finish(ctx);
     ctx.mk.persistDirty = true;
     ctx.invalidate("arrange");
@@ -468,7 +479,7 @@ function toggleCollapse(ctx) {
 
   const bag = track.pane.layoutProps;
   if (bag.collapsed) {
-    restoreTrack(ctx, track);
+    restoreTrack(ctx, track, model.tracks.indexOf(track));
   } else {
     track.pane.state.restoreSize = model.sizes[model.tracks.indexOf(track)];
     ctx.mk.setLayoutProps(track.pane, { collapsed: true });
