@@ -244,10 +244,56 @@ function finish(ctx) {
 
 // ── The shared drag body ─────────────────────────────────────────────────
 
+/**
+ * Restore a collapsed pane to the size it had, not to a default (§7.3).
+ */
+function restoreTrack(ctx, track) {
+  ctx.mk.setLayoutProps(track.pane, {
+    collapsed: false,
+    size: track.pane.state.restoreSize != null ? track.pane.state.restoreSize : track.min || 200
+  });
+  ctx.emit("expand", { index: ctx.props.index, pane: track.pane.id });
+}
+
+/**
+ * A drag away from a collapsed pane re-opens it.
+ *
+ * While a pane is collapsed its track is pinned — `min` and `max` are both the
+ * collapsed size — so every drag resolved to nothing at all. The gutter still
+ * took the pointer, still showed a resize cursor, and did absolutely nothing,
+ * and neither `ArrowRight` nor `End` could reach the pane either. The only way
+ * back was the double-click that closed it, which is not discoverable from a
+ * gutter you are already dragging.
+ *
+ * The gesture is symmetric with the one that collapses: drag *towards* a pane
+ * far enough and it closes, drag *away* far enough and it opens, using the same
+ * threshold. Restoring here rather than mid-resolution keeps the track model
+ * stable for the rest of the gesture, which is what stops the layout jumping.
+ */
+function restoreFromDrag(ctx, model, index, delta) {
+  const candidates = [
+    { track: model.tracks[index], grows: delta > 0 },
+    { track: model.tracks[index + 1], grows: delta < 0 }
+  ];
+  for (let i = 0; i < candidates.length; i++) {
+    const { track, grows } = candidates[i];
+    if (!track || !track.collapsed || !grows) continue;
+    const at = typeof track.collapsible === "object" ? track.collapsible.at : track.min;
+    if (Math.abs(delta) < (at || 0)) continue;
+    restoreTrack(ctx, track);
+    return index + i;
+  }
+  return -1;
+}
+
 function drag(ctx, delta) {
   const state = ctx.state.drag || seedFromCurrent(ctx);
   const model = state.model;
   const index = ctx.props.index;
+  const restored = restoreFromDrag(ctx, model, index, delta);
+  if (restored !== -1) {
+    return { sizes: model.sizes.slice(), applied: 0, restored };
+  }
   const result = resolveDrag(model, index, delta, state.mode, state.start);
 
   // Both neighbours are candidates: a gutter dragged *towards* a pane
@@ -311,6 +357,23 @@ function commit(ctx, result) {
   const state = ctx.state.drag;
   const model = state ? state.model : split && split.splitModel;
   if (!split || !model) return;
+
+  // A restore has already written the pane's size and cleared `collapsed`;
+  // committing measured tracks on top would write the collapsed zero back.
+  //
+  // The stale custom property has to go with it. A drag on the CSS path writes
+  // `--mk-w-{i}` every pointermove, and while the pane was collapsed that value
+  // was zero — which the track expression reads in preference to the restored
+  // size, so the pane came back at its *minimum* rather than the width it had.
+  // The memory was right all along; this was overruling it.
+  if (result && result.restored !== undefined && result.restored !== -1) {
+    ctx.mk.compiler.setAll(split, { [`--mk-w-${result.restored}`]: null });
+    ctx.mk.compiler.flush(split);
+    finish(ctx);
+    ctx.mk.persistDirty = true;
+    ctx.invalidate("arrange");
+    return;
+  }
 
   const axis = state ? state.axis : ctx.props.axis;
   const measured = state && state.css ? readBack(model, axis) : result.sizes;
@@ -381,12 +444,7 @@ function toggleCollapse(ctx) {
 
   const bag = track.pane.layoutProps;
   if (bag.collapsed) {
-    // Size memory: restoring returns the pane to where it was, not to a default.
-    ctx.mk.setLayoutProps(track.pane, {
-      collapsed: false,
-      size: track.pane.state.restoreSize != null ? track.pane.state.restoreSize : track.min || 200
-    });
-    ctx.emit("expand", { index: ctx.props.index, pane: track.pane.id });
+    restoreTrack(ctx, track);
   } else {
     track.pane.state.restoreSize = model.sizes[model.tracks.indexOf(track)];
     ctx.mk.setLayoutProps(track.pane, { collapsed: true });

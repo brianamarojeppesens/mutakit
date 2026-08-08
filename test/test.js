@@ -1674,6 +1674,45 @@ describe("layout: split (§7.3)", () => {
       "with the row still exactly full — no drift across the cycle");
   });
 
+  test("dragging away from a collapsed pane re-opens it, at the size it had", (t) => {
+    const { mk, app } = fixture(t);
+    const [pane] = app.split({
+      axis: "x",
+      gutter: { size: 6, draggable: true },
+      panes: [
+        { id: "r-left", size: 180, min: 64, max: "40%", collapsible: { at: 40, to: 0 } },
+        { id: "r-right", size: "1fr" }
+      ]
+    });
+    mk.tick();
+    const gutter = app.node.children.find((n) => n.type === "resizer");
+    const handle = mk.handleFor(gutter);
+    const width = pane.node.computed.w;
+
+    // In past the threshold: it closes.
+    handle.nudge(-300);
+    mk.tick();
+    t.equal(pane.node.layoutProps.collapsed, true, "dragging in collapses it");
+
+    // Back out past the threshold: it opens again. While collapsed the track is
+    // pinned — `min` and `max` are both the collapsed size — so this resolved to
+    // nothing at all and the gutter did nothing however far it was dragged.
+    handle.nudge(150);
+    mk.tick();
+    t.equal(pane.node.layoutProps.collapsed, false, "dragging back out re-opens it");
+    t.close(pane.node.computed.w, width, 1,
+      "at the width it had, not at its minimum — the drag's own `--mk-w-*` used " +
+      "to survive the restore and overrule the remembered size");
+
+    // A nudge smaller than the threshold must not re-open it: that would make
+    // the gutter impossible to leave closed.
+    handle.nudge(-300);
+    mk.tick();
+    handle.nudge(4);
+    mk.tick();
+    t.equal(pane.node.layoutProps.collapsed, true, "a nudge below the threshold leaves it closed");
+  });
+
   test("keyboard: arrows resize, Shift multiplies, Enter toggles (§7.3, P5)", (t) => {
     const { mk, app, left } = brief(t);
     const gutter = app.node.children.find((n) => n.type === "resizer");
