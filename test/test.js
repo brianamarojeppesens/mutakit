@@ -1747,6 +1747,42 @@ describe("layout: split (§7.3)", () => {
     t.close(pane.node.computed.w, width + 10, 2, "it moved by the drag, from the width it had");
   });
 
+  test("touching the gutter of a closed pane does not forget how wide it was", (t) => {
+    const { mk, app } = fixture(t);
+    const [pane] = app.split({
+      axis: "x",
+      gutter: { size: 6, draggable: true },
+      panes: [
+        { id: "memo-left", size: 200, min: 64, max: "40%", collapsible: { at: 40, to: 0 } },
+        { id: "memo-right", size: "1fr" }
+      ]
+    });
+    mk.tick();
+    const gutter = app.node.children.find((n) => n.type === "resizer");
+    const handle = mk.handleFor(gutter);
+    const width = pane.node.computed.w;
+
+    handle.toggle();
+    mk.tick();
+    t.equal(pane.node.layoutProps.collapsed, true, "closed");
+    t.close(pane.node.state.restoreSize, width, 1, "and it remembers the width");
+
+    // A zero-distance gesture on the gutter, which is what the first half of a
+    // double-click is. An already-collapsed track resolves to its collapsed
+    // size — below the collapse threshold by definition — so this used to be
+    // read as "collapse it" all over again, and the collapsed zero was written
+    // down as the width to restore to.
+    handle.nudge(0);
+    mk.tick();
+    t.close(pane.node.state.restoreSize, width, 1,
+      "pressing the gutter while closed leaves the memory alone");
+
+    handle.toggle();
+    mk.tick();
+    t.close(pane.node.computed.w, width, 1,
+      "so it re-opens at the width it had, not at its minimum");
+  });
+
   test("keyboard: arrows resize, Shift multiplies, Enter toggles (§7.3, P5)", (t) => {
     const { mk, app, left } = brief(t);
     const gutter = app.node.children.find((n) => n.type === "resizer");

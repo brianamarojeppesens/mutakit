@@ -314,7 +314,14 @@ function drag(ctx, delta) {
     const track = model.tracks[i];
     if (!track) continue;
     result.sizes[i] = applySnap(track, result.sizes[i]);
-    if (shouldCollapse(track, result.sizes[i])) result.collapse = i;
+    // Only a pane that is *open* can be collapsed by a drag. An already
+    // collapsed track resolves to its collapsed size, which is below the
+    // threshold by definition — so this said "collapse it" every time the
+    // gutter was touched, and `commit` then recorded the collapsed zero as the
+    // width to restore to. One press on the gutter of a closed pane was enough
+    // to forget how wide it had been, and it came back at its minimum
+    // afterwards. A double-click begins with exactly such a press.
+    if (!track.collapsed && shouldCollapse(track, result.sizes[i])) result.collapse = i;
   }
   return result;
 }
