@@ -300,10 +300,19 @@ export const menu = {
         "aria-checked": item.checked === undefined ? null : String(!!item.checked),
         "aria-haspopup": item.items ? "menu" : null,
         "aria-expanded": item.items ? "false" : null,
+        // The shortcut belongs in `aria-keyshortcuts`, which is what assistive
+        // technology reads as *a shortcut* — the library already does this for
+        // a closable tab. Without it the `kbd` below was still announced, but
+        // as part of the name: the item was called "Cut Ctrl+X".
+        "aria-keyshortcuts": item.shortcut || null,
         text: item.label
       }, el);
       if (item.shortcut) {
-        button.appendChild(dom.el("kbd", { class: "mk-menu__shortcut", text: item.shortcut }));
+        // Hidden from the name for the same reason, and only from the name —
+        // it stays on screen, which is the whole point of printing it.
+        button.appendChild(
+          dom.el("kbd", { class: "mk-menu__shortcut", "aria-hidden": "true", text: item.shortcut })
+        );
       }
       if (item.items) {
         button.appendChild(dom.el("span", { class: "mk-menu__caret", "aria-hidden": "true", text: "›" }));

@@ -1973,6 +1973,16 @@ describe("overlays (§11.2, §16)", () => {
     t.equal(items[0].getAttribute("tabindex"), "0", "one tab stop");
     t.equal(items[1].getAttribute("tabindex"), "-1");
 
+    // A shortcut is announced as a shortcut, not folded into the name. The
+    // `kbd` was printed inside the item and nothing else was set, so the
+    // accessible name came out as "Cut Ctrl+X".
+    t.equal(items[0].getAttribute("aria-keyshortcuts"), "Ctrl+X",
+      "the shortcut is exposed where assistive technology looks for it");
+    t.equal(items[1].getAttribute("aria-keyshortcuts"), null, "and only where there is one");
+    const kbd = items[0].querySelector("kbd");
+    t.equal(kbd && kbd.getAttribute("aria-hidden"), "true",
+      "the printed shortcut stays on screen and out of the name");
+
     key(menu.el, "ArrowDown");
     t.equal(items[1].getAttribute("tabindex"), "0", "arrows move within it");
     key(menu.el, "End");

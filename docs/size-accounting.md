@@ -156,10 +156,10 @@ rather than absorbed.
 
 | Preset | Minified | Gzipped |
 |---|---:|---:|
-| `mutakit` | 242.96 KB | 74.52 KB |
+| `mutakit` | 243.02 KB | 74.54 KB |
 | `mutakit.core` | 96.15 KB | 32.06 KB |
 | `mutakit.dock` | 147.67 KB | 47.86 KB |
-| `mutakit.app` | 171.92 KB | 52.63 KB |
+| `mutakit.app` | 171.98 KB | 52.65 KB |
 | `mutakit.hud` | 110.16 KB | 36.46 KB |
 <!-- sizes:end -->
 
